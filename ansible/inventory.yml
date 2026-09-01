@@ -1,0 +1,11 @@
+---
+# 该 inventory 由 Vagrant 自动生成（通过 ansible.groups）。
+# 当使用 k3s-ops.sh 独立运行 Ansible 时，改为动态从 vagrant/nodes.yml 解析。
+# 默认 placeholder，实际运行时由 Vagrant provisioner 覆盖。
+all:
+  hosts: {}
+  children:
+    server:
+      hosts: {}
+    agent:
+      hosts: {}

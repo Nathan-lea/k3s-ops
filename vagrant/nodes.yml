@@ -1,0 +1,47 @@
+cluster_name: k3s-demo
+k3s_version: v1.30.2+k3s2
+
+network:
+  subnet: 192.168.56.0/24
+  box: bento/ubuntu-22.04
+
+nodes:
+  - name: server-1
+    role: server
+    ip: 192.168.56.10
+    cpus: 2
+    memory: 4096
+    port_forwards:
+      - guest: 30443
+        host: 8443
+      - guest: 30080
+        host: 8080
+
+  # - name: server-2
+  #   role: server
+  #   ip: 192.168.56.11
+  #   cpus: 2
+  #   memory: 2048
+  - name: agent-1
+    role: agent
+    ip: 192.168.56.20
+    cpus: 2
+    memory: 4096
+
+k3s_config:
+  disable_traefik: true
+  disable_servicelb: true
+  taint_server: false
+  cluster_cidr: 10.42.0.0/16
+  service_cidr: 10.43.0.0/16
+
+addons:
+  rancher:
+    enabled: true
+    version: 2.9.x
+    hostname: rancher.k3s.local
+    bootstrap_password: admin
+  ingress:
+    type: nginx
+    enabled: true
+    version: 4.11.x

@@ -1,0 +1,48 @@
+---
+- name: Run common role
+  include_role:
+    name: k3s-common
+
+- name: Install k3s binary
+  include_tasks: install.yml
+
+- name: Generate k3s config.yaml
+  include_tasks: config.yml
+
+- name: Check if cluster already initialized
+  stat:
+    path: /var/lib/rancher/k3s/server/db/etcd
+  register: etcd_dir
+
+- name: Initialize first server
+  include_tasks: init.yml
+  when:
+    - first_server_ip is defined
+    - node_ip == first_server_ip
+    - not etcd_dir.stat.exists
+
+- name: Join existing etcd cluster
+  include_tasks: join.yml
+  when:
+    - first_server_ip is defined
+    - node_ip != first_server_ip
+    - not etcd_dir.stat.exists
+
+- name: Wait for k3s service to be ready
+  wait_for:
+    port: 6443
+    delay: 5
+    timeout: 120
+
+- name: Get node token for agents
+  slurp:
+    src: "{{ k3s_token_file }}"
+  register: node_token_slurp
+  delegate_to: "{{ first_server_host }}"
+  run_once: true
+
+- name: Set node token fact
+  set_fact:
+    k3s_token: "{{ node_token_slurp.content | b64decode | trim }}"
+    cacheable: true
+  run_once: true

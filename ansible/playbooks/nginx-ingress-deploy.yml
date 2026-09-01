@@ -1,0 +1,57 @@
+---
+- name: Deploy nginx-ingress controller
+  hosts: server[0]
+  gather_facts: true
+
+  tasks:
+    - name: Ensure helm binary is installed
+      shell: |
+        if ! command -v helm &> /dev/null; then
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Add ingress-nginx repo
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+
+    - name: Create ingress-nginx namespace
+      kubernetes.core.k8s:
+        name: ingress-nginx
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: Install nginx-ingress
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        chart_version: "{{ addons.ingress.version | default('4.11.0') }}"
+        release_namespace: ingress-nginx
+        release_state: present
+        update_repo: true
+        set_values:
+          - value: "controller.service.type=NodePort"
+          - value: "controller.service.nodePorts.http=30080"
+          - value: "controller.service.nodePorts.https=30443"
+          - value: "controller.replicaCount=1"
+
+    - name: Wait for nginx-ingress controller
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: ingress-nginx
+        label_selectors:
+          - app.kubernetes.io/component=controller
+      register: ingress_pods
+      until: ingress_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length >= 1
+      retries: 30
+      delay: 10
+
+    - name: Display nginx-ingress access info
+      debug:
+        msg:
+          - "nginx-ingress deployed!"
+          - "HTTP: http://{{ first_server_ip }}:30080"

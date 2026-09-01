@@ -1,0 +1,32 @@
+---
+- name: Install and configure k3s cluster
+  hosts: all
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  become: yes
+
+  pre_tasks:
+    - name: Load k3s_config from extra vars
+      set_fact:
+        disable_traefik: "{{ k3s_config.disable_traefik | default(true) }}"
+        disable_servicelb: "{{ k3s_config.disable_servicelb | default(true) }}"
+        taint_server: "{{ k3s_config.taint_server | default(false) }}"
+        cluster_cidr: "{{ k3s_config.cluster_cidr | default('10.42.0.0/16') }}"
+        service_cidr: "{{ k3s_config.service_cidr | default('10.43.0.0/16') }}"
+
+  roles:
+    - role: k3s-server
+      when: node_role == 'server'
+
+    - role: k3s-agent
+      when: node_role == 'agent'
+
+  post_tasks:
+    - name: Display cluster info
+      debug:
+        msg:
+          - "Cluster installed successfully!"
+          - "API Server: https://{{ first_server_ip }}:6443"
+          - "Node: {{ inventory_hostname }} ({{ node_role }})"
+      when: node_role == 'server' and node_ip == first_server_ip

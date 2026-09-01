@@ -1,0 +1,9 @@
+---
+packages:
+  - curl
+  - wget
+  - ethtool
+  - iptables
+  - socat
+  - conntrack
+  - jq

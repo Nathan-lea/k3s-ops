@@ -1,0 +1,14 @@
+---
+- name: Download k3s binary
+  get_url:
+    url: "{{ k3s_download_url }}"
+    dest: "{{ k3s_server_bin }}"
+    mode: '0755'
+    timeout: 120
+  register: k3s_download
+
+- name: Create symlink for kubectl
+  file:
+    src: "{{ k3s_server_bin }}"
+    dest: /usr/local/bin/kubectl
+    state: link

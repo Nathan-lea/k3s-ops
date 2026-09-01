@@ -1,0 +1,11 @@
+---
+- name: Add a new agent node to existing cluster
+  hosts: new_agent
+  gather_facts: true
+  vars:
+    k3s_role: agent
+
+  tasks:
+    - name: Apply agent role
+      include_role:
+        name: k3s-agent

@@ -1,0 +1,30 @@
+---
+- name: Check if ufw is installed
+  stat:
+    path: /usr/sbin/ufw
+  register: ufw_check
+
+- name: Allow k3s ports via ufw
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { port: '6443', proto: 'tcp' }
+    - { port: '10250', proto: 'tcp' }
+    - { port: '8472', proto: 'udp' }
+  when: ufw_check.stat.exists
+  ignore_errors: true
+
+- name: Allow server-specific ports via ufw
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { port: '2379', proto: 'tcp' }
+    - { port: '2380', proto: 'tcp' }
+  when:
+    - ufw_check.stat.exists
+    - node_role == 'server'
+  ignore_errors: true

@@ -1,0 +1,58 @@
+---
+- name: Restore cluster from etcd snapshot
+  hosts: server[0]
+  gather_facts: true
+
+  tasks:
+    - name: Stop k3s on all server nodes
+      systemd:
+        name: k3s
+        state: stopped
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+
+    - name: Verify snapshot file exists
+      stat:
+        path: "{{ snapshot_file }}"
+      register: snap_stat
+
+    - name: Fail if snapshot not found
+      fail:
+        msg: "Snapshot file {{ snapshot_file }} not found"
+      when: not snap_stat.stat.exists
+
+    - name: Restore from snapshot
+      command: >
+        k3s server
+        --cluster-reset
+        --cluster-reset-restore-path={{ snapshot_file }}
+      args:
+        creates: /var/lib/rancher/k3s/server/db/etcd
+      register: restore_result
+      changed_when: restore_result.rc == 0
+
+    - name: Start k3s on first server
+      systemd:
+        name: k3s
+        state: started
+        enabled: true
+
+    - name: Wait for API server
+      wait_for:
+        port: 6443
+        delay: 10
+        timeout: 120
+
+    - name: Start k3s on remaining servers
+      systemd:
+        name: k3s
+        state: started
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'][1:] }}"
+
+    - name: Restart all agents
+      systemd:
+        name: k3s-agent
+        state: restarted
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['agent'] }}"

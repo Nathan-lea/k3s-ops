@@ -1,0 +1,26 @@
+---
+- name: Add a new server node to existing cluster
+  hosts: new_server
+  gather_facts: true
+  vars:
+    k3s_role: server
+
+  tasks:
+    - name: Apply common config
+      include_role:
+        name: k3s-common
+
+    - name: Install k3s binary
+      include_role:
+        name: k3s-server
+        tasks_from: install.yml
+
+    - name: Configure k3s
+      include_role:
+        name: k3s-server
+        tasks_from: config.yml
+
+    - name: Join etcd cluster
+      include_role:
+        name: k3s-server
+        tasks_from: join.yml

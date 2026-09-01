@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ node_ip }}
+advertise-address: {{ node_ip }}
+cluster-cidr: {{ k3s_config.cluster_cidr | default('10.42.0.0/16') }}
+service-cidr: {{ k3s_config.service_cidr | default('10.43.0.0/16') }}
+disable:
+  - traefik
+  - servicelb
+flannel-backend: vxlan
+kubelet-arg:
+  - "allowed-unsafe-sysctls=net.ipv4.ip_forward"
+etcd-expose-metrics: true
+{% if k3s_config.taint_server is defined and not k3s_config.taint_server %}
+node-taint: []
+{% endif %}
+{% if first_server_ip is defined and node_ip == first_server_ip %}
+cluster-init: true
+{% endif %}
+{% if first_server_ip is defined and node_ip != first_server_ip %}
+server: https://{{ first_server_ip }}:6443
+token: {{ k3s_token | default('') }}
+{% endif %}

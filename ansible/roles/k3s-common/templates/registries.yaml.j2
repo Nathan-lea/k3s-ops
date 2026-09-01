@@ -1,0 +1,13 @@
+{% if containerd_mirrors is defined %}
+mirrors:
+{% for registry, mirrors in containerd_mirrors.items() %}
+  {{ registry }}:
+    endpoint:
+{% for mirror in mirrors %}
+      - "{{ mirror }}"
+{% endfor %}
+{% endfor %}
+configs:
+  "docker.io":
+    auth: {}
+{% endif %}

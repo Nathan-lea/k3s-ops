@@ -1,0 +1,16 @@
+---
+- name: Install k3s from scratch
+  hosts: all
+  gather_facts: true
+  serial: 1
+
+  tasks:
+    - name: Run server role on server nodes
+      include_role:
+        name: k3s-server
+      when: node_role == 'server'
+
+    - name: Run agent role on agent nodes
+      include_role:
+        name: k3s-agent
+      when: node_role == 'agent'

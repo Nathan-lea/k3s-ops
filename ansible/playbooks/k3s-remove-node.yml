@@ -1,0 +1,9 @@
+---
+- name: Remove node from cluster
+  hosts: target_node
+  gather_facts: true
+  vars:
+    k3s_action: remove-node
+
+  roles:
+    - role: k3s-manage

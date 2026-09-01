@@ -1,0 +1,52 @@
+---
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Disable swap
+  command: swapoff -a
+  ignore_errors: true
+
+- name: Remove swap entries from fstab
+  mount:
+    name: "{{ item }}"
+    fstype: swap
+    state: absent
+  loop:
+    - swap
+    - none
+  ignore_errors: true
+
+- name: Load kernel modules
+  copy:
+    dest: /etc/modules-load.d/k3s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: Modprobe modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Apply sysctl settings
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - { key: net.ipv4.ip_forward, value: '1' }
+    - { key: net.bridge.bridge-nf-call-iptables, value: '1' }
+    - { key: net.bridge.bridge-nf-call-ip6tables, value: '1' }
+
+- name: Configure containerd mirrors
+  include_tasks: containerd.yml
+
+- name: Configure firewall
+  include_tasks: firewall.yml

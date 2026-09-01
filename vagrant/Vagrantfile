@@ -1,0 +1,96 @@
+require 'yaml'
+
+nodes_config = YAML.load_file(File.join(__dir__, 'nodes.yml'))
+cluster_name = nodes_config['cluster_name']
+network_cfg  = nodes_config['network']
+nodes        = nodes_config['nodes']
+
+ansible_groups = {
+  'server' => [],
+  'agent'  => [],
+  'cluster:children' => %w[server agent]
+}
+
+# Set Ansible roles path so Vagrant's ansible provisioner can find roles
+ENV['ANSIBLE_ROLES_PATH'] = File.join(__dir__, '..', 'ansible', 'roles')
+
+Vagrant.configure('2') do |config|
+  config.vm.box = network_cfg['box']
+  config.vm.box_check_update = false
+
+  config.vm.provider 'virtualbox' do |vb|
+    vb.gui = false
+    vb.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
+    vb.customize ['modifyvm', :id, '--ioapic', 'on']
+  end
+
+  nodes.each_with_index do |node, idx|
+    hostname = "#{cluster_name}-#{node['name']}"
+    is_first_server = (idx == 0 && node['role'] == 'server')
+
+    if node['role'] == 'server'
+      ansible_groups['server'] << hostname
+    else
+      ansible_groups['agent'] << hostname
+    end
+
+    config.vm.define hostname do |vm|
+      vm.vm.hostname = hostname
+
+      vm.vm.provider 'virtualbox' do |vb|
+        vb.name   = hostname
+        vb.cpus   = node['cpus']
+        vb.memory = node['memory']
+      end
+
+      vm.vm.network 'private_network', ip: node['ip']
+
+      (node['port_forwards'] || []).each do |pf|
+        vm.vm.network 'forwarded_port',
+          guest:    pf['guest'],
+          host:     pf['host'],
+          protocol: pf.fetch('protocol', 'tcp'),
+          auto_correct: true
+      end
+
+      if idx == nodes.size - 1
+        vm.vm.provision 'ansible' do |ansible|
+          ansible.playbook = File.join(__dir__, '..', 'ansible', 'playbooks', 'k3s-cluster.yml')
+          ansible.groups = ansible_groups
+          ansible.extra_vars = {
+            k3s_version:          nodes_config['k3s_version'],
+            k3s_config:           nodes_config['k3s_config'],
+            addons:               nodes_config['addons'],
+            cluster_name:         cluster_name,
+            first_server_ip:      nodes.first['ip'],
+            first_server_host:    "#{cluster_name}-#{nodes.first['name']}",
+            k3s_install_dir:      '/usr/local/bin',
+            k3s_server_bin:       '/usr/local/bin/k3s',
+            k3s_config_dir:       '/etc/rancher/k3s',
+            k3s_data_dir:         '/var/lib/rancher/k3s',
+            k3s_token_dir:        '/var/lib/rancher/k3s/server',
+            k3s_token_file:       '/var/lib/rancher/k3s/server/node-token',
+            k3s_etcd_snapshot_dir: '/var/lib/rancher/k3s/server/db/snapshots',
+            k3s_download_url:     "https://github.com/k3s-io/k3s/releases/download/#{nodes_config['k3s_version']}/k3s",
+            containerd_mirrors: {
+              'docker.io' => [
+                'https://docker.1panel.live',
+                'https://docker-0.unsee.tech',
+              ],
+              'quay.io' => [
+                'https://quay.mirrors.ustc.edu.cn',
+              ],
+            },
+          }
+          ansible.host_vars = nodes.each_with_object({}) do |n, h|
+            host = "#{cluster_name}-#{n['name']}"
+            h[host] = {
+              'node_role' => n['role'],
+              'node_ip'   => n['ip'],
+            }
+          end
+        end
+      end
+    end
+  end
+end

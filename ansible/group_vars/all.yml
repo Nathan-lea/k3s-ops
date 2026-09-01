@@ -1,0 +1,34 @@
+---
+# 全局变量
+cluster_name: "{{ cluster_name | default('k3s-demo') }}"
+
+# k3s 安装
+k3s_version: "{{ k3s_version | default('v1.30.2+k3s2') }}"
+k3s_install_dir: /usr/local/bin
+k3s_config_dir: /etc/rancher/k3s
+k3s_data_dir: /var/lib/rancher/k3s
+k3s_server_bin: "{{ k3s_install_dir }}/k3s"
+k3s_token_dir: /var/lib/rancher/k3s/server
+k3s_token_file: "{{ k3s_token_dir }}/node-token"
+k3s_etcd_snapshot_dir: "{{ k3s_data_dir }}/server/db/snapshots"
+
+# k3s 配置选项（从 nodes.yml 传入）
+k3s_config:
+  disable_traefik: "{{ disable_traefik | default(true) }}"
+  disable_servicelb: "{{ disable_servicelb | default(true) }}"
+  taint_server: "{{ taint_server | default(false) }}"
+  cluster_cidr: "{{ cluster_cidr | default('10.42.0.0/16') }}"
+  service_cidr: "{{ service_cidr | default('10.43.0.0/16') }}"
+
+# k3s 下载地址
+k3s_download_url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+
+# 镜像加速
+containerd_mirrors:
+  docker.io:
+    - "https://docker.1panel.live"
+    - "https://docker-0.unsee.tech"
+  quay.io:
+    - "https://quay.mirrors.ustc.edu.cn"
+  gcr.io:
+    - "https://gcr.mirrors.ustc.edu.cn"

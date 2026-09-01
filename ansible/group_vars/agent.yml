@@ -1,0 +1,3 @@
+---
+# Agent 节点变量
+k3s_role: agent

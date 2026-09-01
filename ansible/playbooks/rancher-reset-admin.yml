@@ -1,0 +1,23 @@
+---
+- name: Reset Rancher admin password
+  hosts: server[0]
+  gather_facts: true
+
+  tasks:
+    - name: Get rancher pod name
+      command: >
+        kubectl get pods -n cattle-system
+        -l app=rancher
+        -o jsonpath='{.items[0].metadata.name}'
+      register: rancher_pod
+
+    - name: Reset admin password
+      command: >
+        kubectl exec -n cattle-system {{ rancher_pod.stdout }} --
+        rancher reset-admin
+      register: reset_result
+      changed_when: reset_result.rc == 0
+
+    - name: Display new password
+      debug:
+        msg: "New admin password: {{ reset_result.stdout }}"

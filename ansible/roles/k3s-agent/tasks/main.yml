@@ -1,0 +1,39 @@
+---
+- name: Run common role
+  include_role:
+    name: k3s-common
+
+- name: Install k3s binary
+  include_tasks: install.yml
+
+- name: Configure agent
+  include_tasks: config.yml
+
+- name: Get node token from first server
+  slurp:
+    src: "{{ k3s_token_file }}"
+  register: token_slurp
+  delegate_to: "{{ first_server_host }}"
+
+- name: Set k3s_token fact
+  set_fact:
+    k3s_token: "{{ token_slurp.content | b64decode | trim }}"
+
+- name: Create systemd service for k3s-agent
+  template:
+    src: k3s-agent.service.j2
+    dest: /etc/systemd/system/k3s-agent.service
+    mode: '0644'
+
+- name: Enable and start k3s-agent service
+  systemd:
+    name: k3s-agent
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for k3s-agent to be ready
+  wait_for:
+    port: 10250
+    delay: 10
+    timeout: 120

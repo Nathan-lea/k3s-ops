@@ -1,0 +1,11 @@
+replicas: 1
+service:
+  type: NodePort
+  nodePort: 30443
+ingress:
+  enabled: false
+certificates:
+  - hosts:
+      - rancher.k3s.local
+tls:
+  source: rancher

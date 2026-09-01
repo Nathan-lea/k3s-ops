@@ -1,0 +1,32 @@
+---
+- name: Cordon the node
+  command: kubectl cordon {{ inventory_hostname }}
+  delegate_to: "{{ first_server_host }}"
+  ignore_errors: true
+
+- name: Drain the node
+  command: >
+    kubectl drain {{ inventory_hostname }}
+    --ignore-daemonsets
+    --delete-emptydir-data
+    --force
+  delegate_to: "{{ first_server_host }}"
+  ignore_errors: true
+
+- name: Delete the node from cluster
+  command: kubectl delete node {{ inventory_hostname }}
+  delegate_to: "{{ first_server_host }}"
+  ignore_errors: true
+
+- name: Stop k3s service
+  systemd:
+    name: "{{ 'k3s' if node_role == 'server' else 'k3s-agent' }}"
+    state: stopped
+    enabled: false
+  ignore_errors: true
+
+- name: Remove k3s data directory
+  file:
+    path: "{{ k3s_data_dir }}"
+    state: absent
+  ignore_errors: true
