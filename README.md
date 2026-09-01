@@ -52,6 +52,15 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 - Ansible >= 2.15
 - 宿主机内存 >= 16GB
 
+## 隐私检查钩子
+
+推送到远程仓库（GitHub 等）前会自动执行隐私检查，防止 `kubeconfig`、私钥、绝对路径等敏感信息泄漏。检出后需启用一次：
+
+```bash
+git config core.hooksPath .githooks
+bash scripts/privacy-check.sh   # 可选：手动运行
+```
+
 ## 文档
 
 详细架构设计见 [docs/architecture.md](docs/architecture.md)
