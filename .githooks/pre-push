@@ -1,0 +1,20 @@
+#!/bin/bash
+# pre-push 钩子：在 git push 前执行隐私信息检查
+# 通过 git config core.hooksPath .githooks 启用
+# 推送前若发现任何隐私/敏感信息风险，则阻止推送。
+set -u
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+check_script="${ROOT}/scripts/privacy-check.sh"
+
+if [ -x "$check_script" ]; then
+  if ! bash "$check_script"; then
+    echo ""
+    echo "❌ push 已阻止：存在隐私泄漏风险。请先处理上述问题。"
+    exit 1
+  fi
+else
+  echo "[pre-push] 警告: 未找到 ${check_script},跳过隐私检查"
+fi
+
+exit 0
