@@ -34,6 +34,7 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 |------|------|
 | `init` | 检查环境依赖 |
 | `up [node]` | 启动 VM |
+| `down [node] [-f] [-s]` | 关闭 VM 释放资源（`-f` 强制关机 / `-s` 挂起） |
 | `install` | 首次安装 k3s |
 | `add-node <name>` | 添加节点 |
 | `remove-node -n <name>` | 移除节点 |
@@ -41,9 +42,14 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 | `backup` | etcd 快照备份 |
 | `restore -f <snapshot>` | 从快照恢复 |
 | `deploy-rancher` | 部署 Rancher |
+| `reset-rancher-admin` | 重置 Rancher admin 密码 |
 | `deploy-ingress` | 部署 nginx-ingress |
 | `status` | 集群健康检查 |
 | `destroy` | 销毁所有 VM |
+| `ssh <name>` | SSH 到指定节点 |
+| `kubeconfig [name]` | 获取 kubeconfig |
+
+节点参数写法：所有接受节点名的命令（`up` / `down` / `ssh` / `add-node` / `remove-node` / `kubeconfig`）都接受短名（`agent-1`）和完整主机名（`k3s-demo-agent-1`），节点不存在时报错退出。直接执行 `vagrant` 命令时仍需完整主机名。
 
 ## 环境要求
 

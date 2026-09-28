@@ -267,15 +267,15 @@ addons:
 ### 4.2 动态扩容流程
 
 1. 编辑 `vagrant/nodes.yml`，追加新节点定义
-2. 运行 `k3s-ops.sh up [新节点名]` — Vagrant 启动新 VM
-3. 运行 `k3s-ops.sh add-node [新节点名]` — Ansible 将节点加入集群
+2. 运行 `k3s-ops.sh up <节点名>` — Vagrant 启动新 VM
+3. 运行 `k3s-ops.sh add-node <节点名>` — Ansible 将节点加入集群
    - server 角色 → 执行 `k3s-add-server.yml`，加入 etcd 集群
    - agent 角色 → 执行 `k3s-add-agent.yml`，注册到 server
 
 ### 4.3 缩容流程
 
 1. 运行 `k3s-ops.sh remove-node -n <节点名>` — Ansible cordon → drain → 删除 node 资源
-2. 运行 `vagrant destroy <节点名>` — 销毁 VM
+2. 运行 `vagrant destroy <完整主机名>` — 销毁 VM（remove-node 结束时会提示完整命令）
 3. 从 `nodes.yml` 中移除该节点定义
 
 ---
@@ -351,13 +351,15 @@ k3s server \
 ```bash
 k3s-ops.sh init                    # 检查 Vagrant/Ansible 依赖
 k3s-ops.sh up [node]              # vagrant up（可选指定节点）
+k3s-ops.sh down [node] [-f|-s]   # 关闭 VM 释放资源（-f 强制关机 / -s 挂起）
 k3s-ops.sh install                # 首次完整安装 k3s 集群
-k3s-ops.sh add-node [node]        # 将新节点加入集群
+k3s-ops.sh add-node <node>        # 将新节点加入集群
 k3s-ops.sh remove-node -n <name>  # 移除指定节点
 k3s-ops.sh upgrade -v <version>   # 升级 k3s 版本
 k3s-ops.sh backup                 # etcd 快照备份
 k3s-ops.sh restore -f <snapshot>  # 从快照恢复
 k3s-ops.sh deploy-rancher         # 部署 Rancher UI
+k3s-ops.sh reset-rancher-admin    # 重置 Rancher admin 密码
 k3s-ops.sh deploy-ingress         # 部署 nginx-ingress
 k3s-ops.sh status                 # 集群健康检查
 k3s-ops.sh destroy                # 销毁所有 VM
@@ -381,7 +383,8 @@ k3s-ops.sh kubeconfig             # 获取 kubeconfig
 ```bash
 # nodes.yml 追加 server-2, agent-1
 ./k3s-ops.sh up
-./k3s-ops.sh add-node
+./k3s-ops.sh add-node server-2
+./k3s-ops.sh add-node agent-1
 ```
 
 **场景三：日常升级**
@@ -392,9 +395,9 @@ k3s-ops.sh kubeconfig             # 获取 kubeconfig
 **场景四：节点故障替换**
 ```bash
 ./k3s-ops.sh remove-node -n agent-1
-vagrant destroy agent-1        # 如果 VM 还活着
+vagrant destroy k3s-demo-agent-1   # 如果 VM 还活着（vagrant 命令需完整主机名）
 # 修复或重建后重新添加
-./k3s-ops.sh up agent-1
+./k3s-ops.sh up k3s-demo-agent-1
 ./k3s-ops.sh add-node agent-1
 ```
 
@@ -429,23 +432,30 @@ vagrant destroy agent-1        # 如果 VM 还活着
 ### 9.1 架构
 
 ```
-宿主机 (Host)                              VM 节点
-┌──────────────────────┐                ┌──────────────────────┐
-│  k3s-ops.sh          │                │  health-check.sh     │
-│  scripts/*.sh        │                │  etcd-snapshot-*.sh  │
-│        │             │                │        │             │
-│        ▼             │                │        ▼             │
-│  lib/logging.sh      │                │  /var/log/           │
-│  ──── 写入 ────────► │                │  ├─ k3s-backup.log   │
-│  logs/k3s-ops.log    │                │  └─ k3s-health.log   │
-└──────────────────────┘                └──────────────────────┘
+宿主机 (Host)                                    VM 节点
+┌──────────────────────────────┐          ┌──────────────────────────┐
+│  k3s-ops.sh                  │          │  health-check.sh         │
+│  scripts/*.sh                │          │  etcd-snapshot-*.sh      │
+│        │                     │          │        │                 │
+│        ▼                     │          │        ▼                 │
+│  lib/logging.sh              │          │  /var/log/               │
+│  ──── 写入 ────────────────►  │          │  ├─ k3s-backup.log       │
+│  logs/k3s-ops.log            │          │  └─ k3s-health.log       │
+│  logs/health-check.log       │          └──────────────────────────┘
+└──────────────────────────────┘
 ```
 
 | 层级 | 日志位置 | 说明 |
 |------|----------|------|
 | **Host CLI** | `logs/k3s-ops.log` | 所有 `k3s-ops.sh` 和 `scripts/*.sh` 的操作日志 |
+| **Host 健康检查** | `logs/health-check.log` | `status` 在宿主机执行时的健康检查输出（非 root 无法写 `/var/log`） |
+| **Host VirtualBox** | `logs/vbox/` | VirtualBox 生成的 `*VBoxHeadless-*.log`，由 `up` / `down` / `destroy` 自动归档，保留最近 20 个（`VBOX_LOG_KEEP` 可调） |
 | **VM 备份** | `/var/log/k3s-backup.log` | etcd 快照备份日志（VM 本地） |
 | **VM 健康检查** | `/var/log/k3s-health.log` | 健康检查输出（VM 本地） |
+
+`health-check.sh` 通过 `LOG_FILE` 环境变量决定日志位置：未设置时默认 `/var/log/k3s-health.log`（VM 上以 root 运行），不可写时自动降级到 `$TMPDIR/k3s-health.log`，因此同一份脚本在宿主机和 VM 上都能直接执行。
+
+VirtualBox 会把每个 VM 进程的 `*VBoxHeadless-*.log` 写进启动进程的当前工作目录（即项目根），而 VirtualBox 7.x 已移除 `VBoxManage set logfile`，无法修改写入位置。因此 `k3s-ops.sh` 在 `up` / `down` / `destroy` 结束后调用 `_archive_vbox_logs()`，把根目录的这类文件移入 `logs/vbox/`，并按修改时间仅保留最近 20 个。
 
 ### 9.2 日志库 (`lib/logging.sh`)
 

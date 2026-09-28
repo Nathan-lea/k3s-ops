@@ -31,8 +31,10 @@ k3s-ops/
 ├── addons/                  # Helm values
 ├── scripts/                 # 辅助脚本
 ├── lib/
-│   └── logging.sh           # 共享日志库（所有脚本通过 source 引入）
+│   ├── logging.sh             # 共享日志库（所有脚本通过 source 引入）
+│   └── nodes.sh               # 节点名解析库（短名 ↔ 完整主机名，唯一规则来源）
 ├── logs/                    # 操作日志（自动生成，超 10MB 归档）
+│   └── vbox/                # VirtualBox VM 日志（由 up/down/destroy 自动归档，保留最近 20 个）
 ├── k3s-ops.sh               # 统一 CLI 入口
 └── docs/architecture.md     # 详细架构设计文档
 ```
@@ -49,13 +51,17 @@ k3s-ops/
 ## CLI 入口
 
 ```bash
-k3s-ops.sh init|up|install|add-node|remove-node|upgrade|backup|restore|deploy-rancher|deploy-ingress|status|destroy|ssh|kubeconfig
+k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|deploy-rancher|deploy-ingress|status|destroy|ssh|kubeconfig
 ```
+
+`down` 用于关闭 VM 释放宿主机资源：默认优雅关机（`vagrant halt`），`-f` 强制关机，`-s` 挂起（`vagrant suspend`，恢复最快）。
+
+**节点名规则**：所有接受节点名的命令（`up` / `down` / `ssh` / `add-node` / `remove-node` / `kubeconfig`）统一接受短名（`agent-1`）与完整主机名（`k3s-demo-agent-1`），节点不存在时报错退出。规则集中在 `lib/nodes.sh`（`resolve_host` 把结果写入全局 `RESOLVED_HOST`），新增接受节点名的命令必须复用它，不要另写前缀拼接。集群名从 `vagrant/nodes.yml` 的 `cluster_name` 读取，不得硬编码。
 
 ## 日志
 
-- **宿主机日志**: `logs/k3s-ops.log`（所有 CLI 操作，超 10MB 自动轮转）
-- **VM 节点日志**: `/var/log/k3s-backup.log`, `/var/log/k3s-health.log`
+- **宿主机日志**: `logs/k3s-ops.log`（所有 CLI 操作，超 10MB 自动轮转）、`logs/health-check.log`（`status` 在宿主机执行的健康检查输出）、`logs/vbox/`（VirtualBox 生成的 `*VBoxHeadless-*.log`）
+- **VM 节点日志**: `/var/log/k3s-backup.log`, `/var/log/k3s-health.log`（`health-check.sh` 在 `/var/log` 不可写时自动降级到 `$TMPDIR/k3s-health.log`）
 - **统一日志库**: `lib/logging.sh`（提供 log_info/warn/error/debug/cmd/mark）
 
 ## 路由提醒

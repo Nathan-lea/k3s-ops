@@ -1,14 +1,23 @@
 #!/bin/bash
 # k3s cluster health check
-# 该脚本运行在 VM 节点上，日志记录到 VM 本地文件
+# 该脚本既可在 VM 节点上以 root 运行，也可在宿主机直接运行
+# 日志路径：优先 LOG_FILE 环境变量 → 默认 /var/log/k3s-health.log（VM）→ 不可写时降级
 set -euo pipefail
 
-LOG_FILE="${LOG_FILE:-/var/log/k3s-healthcheck.log}"
+LOG_FILE="${LOG_FILE:-/var/log/k3s-health.log}"
+if ! touch "${LOG_FILE}" 2>/dev/null; then
+  # 非 root 且 /var/log 不可写（如宿主机直接执行）→ 降级到临时目录
+  LOG_FILE="${TMPDIR:-/tmp}/k3s-health.log"
+  touch "${LOG_FILE}" 2>/dev/null || LOG_FILE=""
+fi
+
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 log() {
   local level="$1"; shift
-  echo "[${TIMESTAMP}] [${level}] $*" >> "${LOG_FILE}"
+  if [ -n "${LOG_FILE}" ]; then
+    echo "[${TIMESTAMP}] [${level}] $*" >> "${LOG_FILE}"
+  fi
   echo "[${level}] $*"
 }
 
