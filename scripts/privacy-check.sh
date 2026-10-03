@@ -12,7 +12,9 @@ fi
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
 # 当前 git 跟踪/待跟踪的全部文件
-mapfile -t FILES < <(git ls-files --cached --others --exclude-standard 2>/dev/null)
+# 注意: core.quotepath=false 保证中文/特殊字符文件名以原始 UTF-8 输出,否则 ls-files
+# 会用引号+八进制转义(如 "docs/01-\346\226\207.md"),导致后续 [ -f ] 判断失效而漏检。
+mapfile -t FILES < <(git -c core.quotepath=false ls-files --cached --others --exclude-standard 2>/dev/null)
 if [ "${#FILES[@]}" -eq 0 ]; then
   echo "[privacy-check] 没有可检查的文件"
   exit 0
@@ -26,7 +28,14 @@ ALLOW_IPS=(
   "10.0.2.15" "10.0.2.2"
 )
 # 已确认接受的演示占位密码（设计的一部分，用户明确选择不处理）
-ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********')
+ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********' "s3cret")
+
+# 已知的"非用户本地路径"（系统/容器/教程演示路径，不构成隐私泄漏）
+# 规则1 会拦截 /data/、/mnt/、/root/ 等疑似本机路径；以下为明确非本机数据路径，予以豁免。
+ALLOW_PATH_PATTERNS=(
+  "/data/current"       # k3s 节点内置二进制固定路径 (/var/lib/rancher/k3s/data/current/...)
+  "/data/test.txt"      # 05章容器内 PV 演示挂载路径（教程刻意内容）
+)
 
 # 检查脚本自身（内含正则字符串，不参与内容扫描）
 ALLOW_SELF_FILES=("scripts/privacy-check.sh")
@@ -49,12 +58,23 @@ for f in "${FILES[@]}"; do
   grep -aqI "" "$f" 2>/dev/null || continue
 
   # 规则1: 本地绝对路径(如 /home/、/Users/、/data/;排除 JSON 补丁路径 /data/<数字> 与系统标准路径)
-  if grep -aqE "(/home/[a-zA-Z_]|/Users/|/data/[a-zA-Z_]|/mnt/|/root/|/rootfs/)" "$f" 2>/dev/null; then
-    add_issue "[绝对路径] $f"
+  # 命中的每一行都必须是 ALLOW_PATH_PATTERNS 中的已知路径才放行,否则视为泄漏
+  hits=$(grep -aoE "(/home/[a-zA-Z_][^\"']*|/Users/[^\"']*|/data/[a-zA-Z_][^\"']*|/mnt/[^\"']*|/root/[^\"']*|/rootfs/[^\"']*)" "$f" 2>/dev/null | sort -u || true)
+  if [ -n "$hits" ]; then
+    leak=""
+    while IFS= read -r p; do
+      ok=""
+      for a in "${ALLOW_PATH_PATTERNS[@]}"; do
+        case "$p" in *"$a"*) ok=1; break ;; esac
+      done
+      [ -z "$ok" ] && leak=1
+    done <<< "$hits"
+    [ -n "$leak" ] && add_issue "[绝对路径] $f"
   fi
 
   # 规则2: 私钥内容
-  if grep -aqE "-----BEGIN (RSA |EC |DSA |OPENSSH |)PRIVATE KEY-----" "$f" 2>/dev/null; then
+  # 注意: 模式以 ----- 开头, 必须用 -e 防止被 grep 当作命令行选项
+  if grep -aqE -e "-----BEGIN (RSA |EC |DSA |OPENSSH |)PRIVATE KEY-----" "$f" 2>/dev/null; then
     add_issue "[私钥] $f"
   fi
 
