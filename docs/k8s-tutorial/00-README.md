@@ -34,7 +34,9 @@ export KUBECONFIG=./kubeconfig
 │ 02 架构全景   │ → │ 06 调度与扩缩容       │ → │ 10 进阶之路(生产化)   │
 │ 03 工作负载   │ → │ 07 安全与RBAC         │   │ 11 iptables 与Service│
 │ 04 网络与通讯 │ → │ 08 监控与备份         │   │ 12 etcd 深入使用      │
-└──────────────┘   └──────────────────────┘   └──────────────────────┘
+└──────────────┘   └──────────────────────┘   │ 13 Label 与选择器      │
+                                              │ 14 kubectl 输出定制     │
+                                              └──────────────────────┘
 ```
 
 ### 章节依赖关系
@@ -54,6 +56,8 @@ export KUBECONFIG=./kubeconfig
 | 10 进阶之路 | 09 | 生产化方向、CKA 备考、官方文档索引 |
 | 11 iptables 与Service | 04 | kube-proxy 用 iptables 实现 Service 的原理与规则追踪 |
 | 12 etcd 深入使用 | 08 | etcdctl 连接/读取/维护、快照与恢复完整流程 |
+| 13 Label 与选择器 | 03/04/06 | Label 概念、系统自带标签与默认值、选择器实战 |
+| 14 kubectl 输出定制 | 03 | -o 各格式、custom-columns 自定义列、资源字段结构 |
 
 ---
 
@@ -93,3 +97,5 @@ export KUBECONFIG=./kubeconfig
 | [10 进阶之路](10-进阶之路.md) | 生产化/CKA/资源索引 |
 | [11 iptables 与Service](11-iptables与Service.md) | kube-proxy 的 iptables 转发实现 |
 | [12 etcd 深入使用](12-etcd深入使用.md) | etcdctl 读取/维护/备份恢复 |
+| [13 Label 与选择器](13-Label与选择器.md) | 标签概念/系统自带标签/选择器实战 |
+| [14 kubectl 输出定制](14-kubectl输出定制.md) | -o 格式/custom-columns 自定义列 |
