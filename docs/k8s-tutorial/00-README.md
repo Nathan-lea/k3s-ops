@@ -40,6 +40,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 16 kubectl 命令集合      │
                                               │ 17 资源落位详解          │
                                               │ 18 Annotation 详解       │
+                                              │ 19 服务发现详解          │
                                               └──────────────────────┘
 ```
 
@@ -66,6 +67,7 @@ export KUBECONFIG=./kubeconfig
 | 16 kubectl 命令集合 | 13/14/15 | 六大类命令、语法/选项/子命令、排障链路 |
 | 17 资源落位详解 | 15、04/06/08 | 跨节点三层、归属vs引用、资源存亡规律、排障四问 |
 | 18 Annotation 详解 | 13/15/17 | 概念与选型、六大来源、前缀识别、annotate 操作、实战场景 |
+| 19 服务发现详解 | 04/11/13 | 四大件原理、DNS 命名体系、Endpoints-Slices、DNS vs 环境变量、四层排障 |
 
 ---
 
@@ -111,3 +113,4 @@ export KUBECONFIG=./kubeconfig
 | [16 kubectl 命令集合](16-kubectl命令集合.md) | 六大类命令、语法选项、排障链路 |
 | [17 资源落位详解](17-资源落位详解.md) | 三世界模型、跨节点层次、依附关系、排障四问 |
 | [18 Annotation 详解](18-Annotation详解.md) | label 对比、六大来源、前缀识别、annotate 全命令 |
+| [19 服务发现详解](19-服务发现详解.md) | 四大件原理、DNS 命名体系、Endpoints 生命周期、四层排障 |
