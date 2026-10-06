@@ -42,6 +42,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 18 Annotation 详解       │
                                               │ 19 服务发现详解          │
                                               │ 20 存储卷挂载详解        │
+                                              │ 21 四层与七层转发详解    │
                                               └──────────────────────┘
 ```
 
@@ -70,6 +71,7 @@ export KUBECONFIG=./kubeconfig
 | 18 Annotation 详解 | 13/15/17 | 概念与选型、六大来源、前缀识别、annotate 操作、实战场景 |
 | 19 服务发现详解 | 04/11/13 | 四大件原理、DNS 命名体系、Endpoints-Slices、DNS vs 环境变量、四层排障 |
 | 20 存储卷挂载详解 | 05/17/18 | 六类卷全览、生命周期三层级、PV/PVC/SC 原理、挂载细节、排障四层 |
+| 21 四层与七层转发详解 | 04/11/19 | L4/L7 概念对比、Service 三形态、Ingress 路由、配合模式、分层排障 |
 
 ---
 
@@ -117,3 +119,4 @@ export KUBECONFIG=./kubeconfig
 | [18 Annotation 详解](18-Annotation详解.md) | label 对比、六大来源、前缀识别、annotate 全命令 |
 | [19 服务发现详解](19-服务发现详解.md) | 四大件原理、DNS 命名体系、Endpoints 生命周期、四层排障 |
 | [20 存储卷挂载详解](20-存储卷挂载详解.md) | 六类卷全览、生命周期、PV/PVC/SC 原理、挂载排障 |
+| [21 四层与七层转发详解](21-四层与七层转发详解.md) | L4/L7 对比、Service/Ingress 实现、配合模式、排障 |
