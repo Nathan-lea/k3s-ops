@@ -280,6 +280,60 @@ kubectl -n lab expose deployment nginx-demo --type=NodePort --port=80 --target-p
 
 > ⚠️ 别忘了把副本数改回 5（下一章及以后练习要用）。
 
+### 3.9 另一种内核数据面：ipvs 模式
+
+本章从头到尾分析的 iptables 是 **kube-proxy 的默认模式，但不是唯一模式**。kube-proxy 历史上有 4 种代理模式：
+
+| 模式 | 状态 | 数据面 | 说明 |
+|------|------|--------|------|
+| userspace | ❌ 废弃 | 用户态 | 最早的，慢 |
+| **iptables** | ✅ 默认 | 内核 netfilter | 本章全部内容 |
+| **ipvs**（IP Virtual Server） | ✅ 可选 | 内核哈希表 | 大规模/需要调度算法时 |
+| kernelspace | 仅 Windows | — | 无 |
+
+**ipvs 与 iptables 的本质区别**：
+
+```text
+iptables: 链式规则线性匹配（O(n)）——规则越多越慢，转发靠 statistic 随机概率
+ipvs:     内核哈希表直查（O(1)）+ 连接级调度算法——rr/wrr/lc/wlc/sh（轮询/加权轮询/最少连接…）
+```
+
+| 维度 | iptables（本章） | ipvs |
+|------|-----------------|------|
+| 匹配方式 | 链式遍历 `KUBE-SVC-*` | 哈希表查虚拟服务 |
+| 复杂度 | O(规则数) | O(1) |
+| 转发决策 | 随机概率（statistic） | **调度算法**（rr/wrr/lc/sh） |
+| 连接跟踪 | conntrack + 概率链 | 内核连接级管理 |
+| 查看命令 | `iptables -t nat -L KUBE-SVC-* -n` | `ipvsadm -Ln`（虚拟服务表） |
+| 适用规模 | 中小集群 | **大集群**/需要会话保持、加权分发 |
+
+**本集群现状（实测）**：
+
+```text
+KUBE-SERVICES 链存在    → 当前是 iptables 模式（本章一切分析有效）
+/proc/net/ip_vs 不存在   → ip_vs 模块未加载（内核模块未装/未启用）
+```
+
+**切换方法**（本集群若要切，步骤）：
+
+```bash
+# ① 节点上加载 ipvs 内核模块（Ubuntu 需 linux-modules-extra 包）
+sudo modprobe ip_vs ip_vs_rr ip_vs_wrr ip_vs_lc ip_vs_wlc ip_vs_sh
+
+# ② k3s 启动参数启用（server/agent 都加）
+--kube-proxy-arg proxy-mode=ipvs
+
+# ③ 验证：ipvsadm -Ln 应看到虚拟服务表
+sudo ipvsadm -Ln
+# 输出示例（无实际输出前以 ipvsadm 安装为准）:
+# IP Virtual Server version 1.2.1
+#   -> 10.43.23.169:80 rr
+```
+
+> **边界提醒**：iptables/ipvs 之争只发生在 kube-proxy 这一层（Service 的 L4 转发）。**Pod 间互联是 CNI（flannel/vxlan，第 04 章）的职责**，与 proxy 模式无关——两个层面独立运行、叠加组成集群网络。
+
+> 排障注意：集群若跑了 ipvs 模式，本章的 `iptables -L` 命令会查不到 `KUBE-SVC-*` 链（它们根本不存在）——先 `ipvsadm -Ln` 确认真实规则，别拿 iptables 的结论硬套。**看规则前先确认 proxy 模式**。
+
 ## 4. Rancher 界面对照
 
 iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式：
@@ -296,6 +350,7 @@ iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式
 - NodePort 通过 `KUBE-NODEPORTS → KUBE-EXT-*` 进入同一个分配链
 - 回包靠 0x4000 标记 + `KUBE-POSTROUTING` 的 MASQUERADE
 - 所有链名后注释 `/* namespace/服务名 */`，是排障认链的第一线索
+- **iptables 只是 kube-proxy 的默认模式**：ipvs 模式用内核哈希表 + 调度算法（rr/wrr/lc…），查规则用 `ipvsadm -Ln`；排障前先确认集群跑的哪种模式
 
 ## 动手练习
 
@@ -304,6 +359,7 @@ iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式
 3. 用 `curl` 多次请求 NodePort，再用 `-L ... -n -v` 观察各 SEP 的 pkts 计数是否大致均衡。
 4. 新创建一个 Service（如 `kubectl -n lab expose deploy probe-demo --port=80 --name=probe-svc`），观察 KUBE-SERVICES 链新增的行与注释。
 5. 思考题：为什么概率链设计成 1/5 → 1/4 → 1/3 → 1/2 → 1 而不是每条都写 20%？
+6. 思考题：`ipvsadm -Ln` 与本集群的 `iptables -t nat -L KUBE-SERVICES -n` 是什么关系？若集群切成 ipvs 模式，本章哪些分析会失效（提示：§3.9 排障注意）。
 
 <details>
 <summary>参考答案</summary>
@@ -313,4 +369,5 @@ iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式
 3. 多次请求后各 SEP 行 pkts 数值接近（统计平均）。
 4. 新增 `/* lab/probe-svc cluster IP */` 一行，指向新的 `KUBE-SVC-*` 链。
 5. 每条规则若固定 20%，前 5 条各自命中 20%，但**第 5 条之后的包会被丢弃**（无后续规则）；概率递减保证「前几条随机、最后一条兜底全收」，且对每个端点命中率正好 1/N。删除/新增端点时 kube-proxy 会重建整条链。
+6. 两者是"同一份转发逻辑的两种内核实现"：iptables 用链式规则（第 11 章全套），ipvs 用哈希表 + 调度算法（`ipvsadm -Ln` 看到虚拟服务表）。切成 ipvs 后：`KUBE-SERVICES/KUBE-SVC-*/KUBE-SEP-*` 链不再存在，本章的 `iptables -t nat -L` 命令查不到 Service 规则——排障要改用 `ipvsadm -Ln`；但 ClusterIP/NodePort/Endpoints 的概念与排查顺序不变（§3.9 排障注意）。
 </details>
