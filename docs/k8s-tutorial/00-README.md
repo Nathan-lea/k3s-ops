@@ -43,6 +43,8 @@ export KUBECONFIG=./kubeconfig
                                               │ 19 服务发现详解          │
                                               │ 20 存储卷挂载详解        │
                                               │ 21 四层与七层转发详解    │
+                                              │ 22 eBPF 与 Cilium 详解   │
+                                              │ 23 CNI 插件体系          │
                                               └──────────────────────┘
 ```
 
@@ -72,6 +74,8 @@ export KUBECONFIG=./kubeconfig
 | 19 服务发现详解 | 04/11/13 | 四大件原理、DNS 命名体系、Endpoints-Slices、DNS vs 环境变量、四层排障 |
 | 20 存储卷挂载详解 | 05/17/18 | 六类卷全览、生命周期三层级、PV/PVC/SC 原理、挂载细节、排障四层 |
 | 21 四层与七层转发详解 | 04/11/19 | L4/L7 概念对比、Service 三形态、Ingress 路由、配合模式、分层排障 |
+| 22 eBPF 与 Cilium 数据面 | 11/21 | eBPF 原理、kube-proxy 痛点、Cilium socket LB/策略/Hubble、三代数据面对比 |
+| 23 CNI 插件体系 | 04/22 | CNI 规范/流程、flannel/Calico/Cilium 对比、本集群 flannel 全解剖、切换与排障 |
 
 ---
 
@@ -120,3 +124,5 @@ export KUBECONFIG=./kubeconfig
 | [19 服务发现详解](19-服务发现详解.md) | 四大件原理、DNS 命名体系、Endpoints 生命周期、四层排障 |
 | [20 存储卷挂载详解](20-存储卷挂载详解.md) | 六类卷全览、生命周期、PV/PVC/SC 原理、挂载排障 |
 | [21 四层与七层转发详解](21-四层与七层转发详解.md) | L4/L7 对比、Service/Ingress 实现、配合模式、排障 |
+| [22 eBPF 与 Cilium 数据面详解](22-eBPF与Cilium数据面详解.md) | eBPF 原理、Cilium 数据面、三代对比、识别数据面 |
+| [23 CNI 插件体系详解](23-CNI插件体系详解.md) | CNI 规范、三大插件对比、flannel 实站、切换排障 |
