@@ -1,7 +1,7 @@
 # k3s-ops 架构设计文档
 
 > 版本: v1.0
-> 最后更新: 2026-05-24
+> 最后更新: 2026-10-09
 
 ---
 
@@ -95,6 +95,60 @@ k3s-ops 是一个面向 **k3s 全生命周期管理** 的运维项目，基于 *
 | 10256 | kube-proxy 健康检查 | TCP | 所有节点 |
 | 8472 | Flannel VXLAN | UDP | 所有节点 |
 | 30000-32767 | NodePort 服务 | TCP/UDP | 按需 |
+
+### 2.5 宿主机与 VM 的网络路径（VirtualBox NAT / Host-only）
+
+Vagrant 为每台 VM 接入两块网卡：第一块 **NAT**（`nic1`），第二块 **Host-only**（`nic2`，由 Vagrantfile 的 `private_network` 创建）。两者独立，分工如下（以 server-1 实测为准）：
+
+| 网卡 | VirtualBox 类型 | VM 内接口 / 地址 | 网段 | 用途 |
+|------|-----------------|------------------|------|------|
+| nic1 | NAT | `eth0` = 10.0.2.15/24 | 10.0.2.0/24 | 出公网；访问宿主机 loopback 上的服务 |
+| nic2 | Host-only | `eth1` = 192.168.56.10/24 | 192.168.56.0/24 | 宿主机 ↔ VM、VM ↔ VM（k3s 节点互连） |
+
+**`10.0.2.2` 从哪来？** 它不是本项目配置出来的，而是 **VirtualBox NAT 模式的固定约定**。NAT 引擎在访客与宿主机之间虚拟一个 `10.0.2.0/24` 内网（若有多块 NAT 则依次 `10.0.3.0`…），默认地址见下表（源自 VirtualBox 官方文档）：
+
+| 地址 | 角色 |
+|------|------|
+| **10.0.2.2** | NAT 网关/路由器 + DHCP 服务器，**并映射到宿主机 loopback `127.0.0.1`** |
+| 10.0.2.3 | NAT 内置 DNS 代理（仅 `--natdnsproxy1 on` 时使用） |
+| 10.0.2.4 | VirtualBox 内置 TFTP（PXE 引导） |
+| **10.0.2.15** | 访客自身（DHCP 分配的第一个地址） |
+
+关键点：NAT 引擎把发往 `10.0.2.2` 的流量**转交给宿主机的 `127.0.0.1`**。因此宿主机上**只监听 loopback 的服务**（例如本机 gitea `127.0.0.1:3000`）无需改绑定、也无需知道宿主机在局域网中的真实 IP，VM 内即可通过 `http://10.0.2.2:3000` 访问。
+
+**实测验证**（server-1，2026-10-09）：
+
+```text
+# DHCP 租约 (/run/systemd/netif/leases/2)
+ADDRESS=10.0.2.15
+ROUTER=10.0.2.2
+SERVER_ADDRESS=10.0.2.2
+
+# 路由
+default via 10.0.2.2 dev eth0 proto dhcp src 10.0.2.15
+10.0.2.2 dev eth0 proto dhcp scope link src 10.0.2.15
+
+# VM 内访问宿主机 loopback 上的 gitea
+$ curl http://10.0.2.2:3000/        → HTTP 200
+$ curl http://192.168.56.1:3000/    → 不可达（gitea 只绑 loopback，host-only 网关到不了）
+```
+
+> 注：DHCP 下发的 DNS 默认是**宿主机配置的 DNS**（本集群为 192.168.2.1）；只有开启 `--natdnsproxy1 on` 后才会显示为 `10.0.2.3`。
+
+**宿主机 → VM 的入口**走 NAT 端口转发（Vagrant `forwarded_port`，来自 `nodes.yml` 的 `port_forwards`）：
+
+| 宿主监听 | → VM | 用途 |
+|----------|------|------|
+| 127.0.0.1:2222 | :22 | Vagrant SSH |
+| :8080 | :30080 | nginx-ingress HTTP |
+| :8443 | :30443 | Rancher UI |
+
+**修改 NAT 网段**（一般无需改动）：
+
+```bash
+VBoxManage modifyvm <vm> --natnet1 "192.168.99.0/24"
+# 网关随之变为 192.168.99.2，访客第一个地址为 192.168.99.15
+```
 
 ---
 
