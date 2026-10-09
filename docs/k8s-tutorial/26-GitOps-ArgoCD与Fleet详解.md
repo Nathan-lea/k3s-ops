@@ -219,20 +219,177 @@ kubectl apply -f gitrepo.yaml
 
 ### 4.3 第一次同步：撞上真实坑——Fleet 的 path 必须"自包含"
 
-等 25 秒后查 GitRepo 状态：
+等 25 秒后查 GitRepo 状态，得到一条 `ErrApplied`（应用失败）：
 
 ```text
-NAME         REPO                                        COMMIT                                     BUNDLEDEPLOYMENTS-READY   STATUS
-fleet-demo   http://10.0.2.2:3000/admin/fleet-demo.git   7d86f3395...                               0/1                       ErrApplied(1) [Cluster fleet-local/local: error while running post render on files: accumulating resources from '../../base': '../../base' doesn't exist']
+NAME         REPO                                        COMMIT                BUNDLEDEPLOYMENTS-READY   STATUS
+fleet-demo   http://10.0.2.2:3000/admin/fleet-demo.git   7d86f3395...          0/1                       ErrApplied(1) [Cluster fleet-local/local: error while running post render on files: accumulating resources from '../../base': '../../base' doesn't exist']
 ```
 
-**还原这个错误**：仓库里 overlay 目录的 kustomization 写的是 `resources: [../../base]`（跨目录相对引用）——这在"你自己电脑上运行 kubectl kustomize"没问题（第 25 章就这么用的），但 **Fleet 拉取时只拷贝 path 指向的那个目录本身**，`../../base` 在 Fleet 的工作目录里不存在。
+#### 为什么失败：Fleet 把"每个 path"当成一个独立的渲染根
 
-**修复**：把 overlay 改成**自包含**（base 的文件复制进 overlay 同目录，kustomization 直接列本地文件）——这是 Fleet（以及很多渲染器）处理 Kustomize 的通用约定：**每个 path 是独立的"渲染单元"**。改后 push，Fleet 会自动检测到新 commit 并重试：
+关键在 4.2 那行 `spec.paths: [kustomize/overlays/prod]`。Fleet 渲染时**只把 path 指向的那个目录当作 kustomize 的根**，而 overlay 里写的是 `../../base`——想往上跳两级去拿资源，就跳出了这个根范围，Fleet 的工作区里自然找不到。
+
+这不是 Kustomize 的问题（第 25 章你在**完整仓库**里跑 `kubectl kustomize overlays/prod` 是成功的），而是 **Fleet 的渲染方式**决定的。本地复现，一测便知：
+
+```bash
+# A) 完整仓库都在 → 成功
+kubectl kustomize overlays/prod
+# 得到 prod-nginx-svc / prod-nginx-demo / replicas: 2
+
+# B) 模拟 Fleet：只把 path 目录拷到一个独立根，再渲染 → 报错（与上面同源）
+cp -r overlays/prod /tmp/render-root && cd /tmp/render-root && kubectl kustomize .
+# error: accumulating resources: accumulation err='accumulating resources from
+#   '../../base': ... no such file or directory': must build at directory: not a valid directory
+```
+
+一句话：**Fleet 眼里"一个 path = 一个独立 kustomize 根"，path 里不能引用 `..`。**
+
+#### 改前 vs 改后（对照）
+
+**① 改前**（commit `7d86f33`）——仓库靠 base 跨目录共享，overlay 里只有一个文件：
+
+```text
+fleet-demo/
+└── kustomize/
+    ├── base/                          # 底稿（被 overlay 跨目录引用）
+    │   ├── deployment.yaml
+    │   ├── service.yaml
+    │   └── kustomization.yaml
+    └── overlays/
+        └── prod/
+            └── kustomization.yaml     # ★ 只有 1 个文件
+```
+
+`kustomize/overlays/prod/kustomization.yaml`（改前）：
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base          # ★ 元凶：跳两级去拿 base，落到 Fleet 根的外面 → 找不到
+namePrefix: prod-
+replicas:
+  - name: nginx-demo
+    count: 2
+commonLabels:
+  env: prod
+patchesStrategicMerge:
+  - |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-demo
+    spec:
+      template:
+        spec:
+          containers:
+          - name: nginx
+            imagePullPolicy: IfNotPresent
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+```
+
+**② 改后**（commit `78e807c`）——把资源"复制进" path 目录，让每个 path 自包含：
+
+```text
+fleet-demo/
+└── kustomize/
+    ├── base/                          # 保留（Fleet 不指向它，不参与本次渲染）
+    │   ├── deployment.yaml
+    │   ├── service.yaml
+    │   └── kustomization.yaml
+    └── overlays/
+        └── prod/                      # ★ GitRepo.path 指向这里，必须自包含
+            ├── deployment.yaml        # ← 从 base 复制进来（内容不变）
+            ├── service.yaml           # ← 从 base 复制进来（内容不变）
+            └── kustomization.yaml     # resources 改成"同目录"文件
+```
+
+`kustomize/overlays/prod/kustomization.yaml`（改后，只动了 `resources` 两行）：
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml     # ★ 改成同目录文件，不再 ../../base
+  - service.yaml
+namePrefix: prod-
+replicas:
+  - name: nginx-demo
+    count: 2
+commonLabels:
+  env: prod
+patchesStrategicMerge:
+  - |-
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-demo
+    spec:
+      template:
+        spec:
+          containers:
+          - name: nginx
+            imagePullPolicy: IfNotPresent
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+```
+
+`kustomize/overlays/prod/deployment.yaml`（从 base 复制，内容不变，供对照）：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kustomize-demo
+  template:
+    metadata:
+      labels:
+        app: kustomize-demo
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+```
+
+`kustomize/overlays/prod/service.yaml`（从 base 复制，内容不变）：
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+spec:
+  type: NodePort
+  selector:
+    app: kustomize-demo
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30999
+```
+
+> **GitRepo CR 一个字都不用改**——`spec.paths` 仍然是 `kustomize/overlays/prod`（见 4.2）。变的只是仓库里那个目录的内容：从"依赖外部 base"变成"自包含"。
+
+改后 push，Fleet 自动检测到新 commit 并重试：
 
 ```text
 78e807c  fix: kustomize overlay self-contained (fleet path constraint)
 ```
+
+> **通用规律**：Fleet 的每个 path 都是一个独立渲染单元。多环境复用时，要么把公共部分"复制/生成"进每个 path，要么直接用 **Helm chart**（chart 天生自包含：模板都在 chart 目录内，`helm template` 不依赖外部相对路径）。
 
 ### 4.4 自动交付：GitRepo → Bundle → 资源落地
 
