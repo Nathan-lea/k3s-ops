@@ -48,6 +48,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 24 Helm 与 Chart 详解    │
                                               │ 25 Kustomize 与 Helm 对比│
                                               │ 26 GitOps 与 Fleet/ArgoCD│
+                                              │ 27 GitOps 仓库组织       │
                                               └──────────────────────┘
 ```
 
@@ -82,6 +83,7 @@ export KUBECONFIG=./kubeconfig
 | 24 Helm 与 Chart | 03/15 | Chart/values/生命周期、服务转 Chart 三步、install→upgrade→rollback→uninstall 闭环 |
 | 25 Kustomize 与 Helm 对比 | 03/15/24 | base+overlay 覆盖模型、四大魔法、kubectl -k 渲染/落地、Helm vs Kustomize 选型 |
 | 26 GitOps：Fleet 与 ArgoCD | 15/24/25 | GitOps 四原则、Fleet/ArgoCD 架构、真实闭环（同步/漂移修复/回滚）、选型对比 |
+| 27 GitOps 多服务与多环境仓库组织 | 24/25/26 | 两类仓库、三个决策问题、结构 A/B/C、目录 vs 分支、多服务两条路线实测、复用与反模式 |
 
 ---
 
@@ -135,3 +137,4 @@ export KUBECONFIG=./kubeconfig
 | [24 Helm 与 Chart 详解](24-Helm与Chart详解.md) | Chart 概念、服务转 Chart、生命周期闭环、release 状态 |
 | [25 Kustomize 与 Helm 对比详解](25-Kustomize与Helm对比详解.md) | base+overlay、四大魔法、kubectl -k、选型与排障 |
 | [26 GitOps：Fleet 与 ArgoCD 详解](26-GitOps-ArgoCD与Fleet详解.md) | GitOps 四原则、Fleet 实测闭环、漂移修复、对比选型 |
+| [27 GitOps 多服务与多环境仓库组织](27-GitOps多服务与多环境仓库组织.md) | 两类仓库、三个决策、结构 A/B/C、多服务两路线实测、复用与反模式 |
