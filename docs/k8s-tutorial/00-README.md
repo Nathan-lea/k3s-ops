@@ -45,6 +45,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 21 四层与七层转发详解    │
                                               │ 22 eBPF 与 Cilium 详解   │
                                               │ 23 CNI 插件体系          │
+                                              │ 24 Helm 与 Chart 详解    │
                                               └──────────────────────┘
 ```
 
@@ -76,6 +77,7 @@ export KUBECONFIG=./kubeconfig
 | 21 四层与七层转发详解 | 04/11/19 | L4/L7 概念对比、Service 三形态、Ingress 路由、配合模式、分层排障 |
 | 22 eBPF 与 Cilium 数据面 | 11/21 | eBPF 原理、kube-proxy 痛点、Cilium socket LB/策略/Hubble、三代数据面对比 |
 | 23 CNI 插件体系 | 04/22 | CNI 规范/流程、flannel/Calico/Cilium 对比、本集群 flannel 全解剖、切换与排障 |
+| 24 Helm 与 Chart | 03/15 | Chart/values/生命周期、服务转 Chart 三步、install→upgrade→rollback→uninstall 闭环 |
 
 ---
 
@@ -126,3 +128,4 @@ export KUBECONFIG=./kubeconfig
 | [21 四层与七层转发详解](21-四层与七层转发详解.md) | L4/L7 对比、Service/Ingress 实现、配合模式、排障 |
 | [22 eBPF 与 Cilium 数据面详解](22-eBPF与Cilium数据面详解.md) | eBPF 原理、Cilium 数据面、三代对比、识别数据面 |
 | [23 CNI 插件体系详解](23-CNI插件体系详解.md) | CNI 规范、三大插件对比、flannel 实站、切换排障 |
+| [24 Helm 与 Chart 详解](24-Helm与Chart详解.md) | Chart 概念、服务转 Chart、生命周期闭环、release 状态 |
