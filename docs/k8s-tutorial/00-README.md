@@ -53,6 +53,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 29 私有仓库认证与安全    │
                                               │ 30 混用 Kustomize/Helm   │
                                               │ 31 Ingress 与证书管理   │
+                                              │ 32 Rancher 多租户与RBAC  │
                                               └──────────────────────┘
 ```
 
@@ -92,6 +93,7 @@ export KUBECONFIG=./kubeconfig
 | 29 GitOps 私有仓库认证与安全 | 26/27/28 | Fleet 三种 Git 认证（HTTP/SSH/GitHub App）、clientSecretName、CA/TLS、私有 Helm 仓库认证、Policy 与安全最佳实践 |
 | 30 混用 Kustomize 与 Helm | 25/27/28 | Fleet 按 path 判定工具、一个 GitRepo 混用 Kustomize/Helm/纯 YAML 三种模式实测、同一 path 混用的真实坑、fleet.yaml 显式指定、与 ArgoCD 对照及选型 |
 | 31 Ingress 深入与证书管理 | 04/21 | IngressClass/Controller 职责、pathType 与转发行为、rewrite/CORS/限流/会话保持/金丝雀注解全实测（含 4 个真实坑）、cert-manager 私有 CA 证书全流程、HTTPS/308/续期、排障清单 |
+| 32 Rancher 多租户与 RBAC | 01/07/10 | Rancher 多租户模型（Global/Cluster/Project）、Users/RoleTemplate/Projects/Bindings、Namespace 归属、实操新用户授权、集群级授权、排障清单 |
 
 ---
 
@@ -150,3 +152,4 @@ export KUBECONFIG=./kubeconfig
 | [29 GitOps 私有仓库认证与安全](29-GitOps私有仓库认证与安全.md) | 三种 Git 认证、clientSecretName 实测、CA/TLS、私有 Helm 仓库、Policy 与安全 |
 | [30 混用 Kustomize 与 Helm](30-混合使用Kustomize与Helm.md) | Fleet 按 path 判定、Kustomize/Helm/纯 YAML 三模式混合实测、同一 path 混用的坑、fleet.yaml 显式指定 |
 | [31 Ingress 深入与证书管理](31-Ingress深入实战与证书管理.md) | IngressClass/Controller、注解家族全实测与真实坑、cert-manager 私有 CA 证书链路、HTTPS/续期、排障清单 |
+| [32 Rancher 多租户与 RBAC](32-Rancher多租户与RBAC.md) | Rancher 多租户模型、CR 识别、项目/集群授权实操、Namespace 归属、排障清单 |
