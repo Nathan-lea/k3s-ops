@@ -89,7 +89,7 @@ export KUBECONFIG=./kubeconfig
 | 27 GitOps 多服务与多环境仓库组织 | 24/25/26 | 两类仓库、三个决策问题、结构 A/B/C、目录 vs 分支、多服务两条路线实测、复用与反模式 |
 | 28 GitOps 使用 Helm Chart 完整实战 | 24/25/26/27 | fleet.yaml/options、值合并顺序、共享 chart 多环境（显式 bundles）、chart 自包含与 valuesFiles 两个真实坑、对比选型 |
 | 29 GitOps 私有仓库认证与安全 | 26/27/28 | Fleet 三种 Git 认证（HTTP/SSH/GitHub App）、clientSecretName、CA/TLS、私有 Helm 仓库认证、Policy 与安全最佳实践 |
-| 30 混用 Kustomize 与 Helm | 25/27/28 | Fleet 按 path 判定工具、一个 GitRepo 混用两种工具实测、同一 path 混用的真实坑、fleet.yaml 显式指定、与 ArgoCD 对照及选型 |
+| 30 混用 Kustomize 与 Helm | 25/27/28 | Fleet 按 path 判定工具、一个 GitRepo 混用 Kustomize/Helm/纯 YAML 三种模式实测、同一 path 混用的真实坑、fleet.yaml 显式指定、与 ArgoCD 对照及选型 |
 
 ---
 
@@ -146,4 +146,4 @@ export KUBECONFIG=./kubeconfig
 | [27 GitOps 多服务与多环境仓库组织](27-GitOps多服务与多环境仓库组织.md) | 两类仓库、三个决策、结构 A/B/C、多服务两路线实测、复用与反模式 |
 | [28 GitOps 使用 Helm Chart 完整实战](28-GitOps与Helm完整实战.md) | fleet.yaml/options、值合并顺序、共享 chart 多环境、两个真实坑、对比选型 |
 | [29 GitOps 私有仓库认证与安全](29-GitOps私有仓库认证与安全.md) | 三种 Git 认证、clientSecretName 实测、CA/TLS、私有 Helm 仓库、Policy 与安全 |
-| [30 混用 Kustomize 与 Helm](30-混合使用Kustomize与Helm.md) | Fleet 按 path 判定、混合仓库实测、同一 path 混用的坑、fleet.yaml 显式指定 |
+| [30 混用 Kustomize 与 Helm](30-混合使用Kustomize与Helm.md) | Fleet 按 path 判定、Kustomize/Helm/纯 YAML 三模式混合实测、同一 path 混用的坑、fleet.yaml 显式指定 |

@@ -4,7 +4,7 @@
 
 - 明确回答:**一个部署仓库 / 一个 GitRepo 里能否同时用 Kustomize 和 Helm?**（能，且是原生能力）
 - 理解 Fleet 的**按 path 判定规则**：目录里出现什么文件，就决定用什么工具
-- 通过**真实混合仓库实测**，看到两个工具在同一 GitRepo、同一命名空间里各自独立同步
+- 通过**真实混合仓库实测**，看到 Kustomize、Helm、纯 YAML 三种模式在同一 GitRepo、同一命名空间里各自独立同步
 - 踩并绕开一个真实坑：**同一个 path 同时放 `Chart.yaml` 和 `kustomization.yaml` 会怎样**
 - 掌握在一个 bundle 内**显式指定**工具（`fleet.yaml`）、以及 Kustomize 内含 Helm 的写法
 - 对比 **ArgoCD**，并给出仓库组织与选型建议
@@ -32,7 +32,7 @@ Fleet 的做法是**按 path（目录）逐个判定**用哪种工具。你在 G
 | `*.yaml`（无上述两者） | 当作普通 K8s 资源直接部署 |
 | `overlays/{name}` | 纯 YAML 场景下的定制目录 |
 
-> 判定是**逐目录**的：`services/order` 可以是 Kustomize，`services/payment` 可以是 Helm，互不影响。
+> 判定是**逐目录**的：`services/order` 可以是 Kustomize，`services/payment` 可以是 Helm，`services/config` 可以是纯 YAML，互不影响——**三种模式可在同一个仓库、同一个 GitRepo 里共存**。
 
 ---
 
@@ -42,11 +42,11 @@ Fleet 的做法是**按 path（目录）逐个判定**用哪种工具。你在 G
 
 > **每个 path → 一个 Bundle；每个 Bundle 独立渲染、独立同步、独立汇报状态。**
 
-所以"混用"在 Fleet 里根本不算特殊操作——它本来就是把每个目录当独立单元。真正需要小心的只有一件事：**别让一个目录同时命中两种判定**（见第 4 节）。
+所以"混用"在 Fleet 里根本不算特殊操作——它本来就是把每个目录当独立单元。真正需要小心的只有一件事：**别让一个目录同时命中多种判定**（见第 4 节）。
 
 ---
 
-## 3. 实站：一个仓库混用两种工具（真实）
+## 3. 实站：一个仓库混用三种模式（Kustomize / Helm / 纯 YAML）（真实）
 
 ### 3.1 仓库结构
 
@@ -56,11 +56,14 @@ mixed-tools-demo/
     ├── order/                        # ← Kustomize
     │   ├── kustomization.yaml        #   namePrefix: order-
     │   └── configmap.yaml            #   ConfigMap shop-config
-    └── payment/                      # ← Helm
-        ├── Chart.yaml                #   name: payment, version 0.1.0
-        ├── values.yaml               #   configValue: from-helm-values
-        └── templates/
-            └── configmap.yaml         #   ConfigMap payment-config
+    ├── payment/                      # ← Helm
+    │   ├── Chart.yaml                #   name: payment, version 0.1.0
+    │   ├── values.yaml               #   configValue: from-helm-values
+    │   └── templates/
+    │       └── configmap.yaml        #   ConfigMap payment-config
+    └── config/                       # ← 纯 YAML（无 Chart.yaml / kustomization.yaml）
+        ├── configmap.yaml            #   ConfigMap app-config
+        └── service.yaml              #   Service app-config
 ```
 
 `order/kustomization.yaml`：
@@ -86,7 +89,31 @@ data:
   rendered-by: helm
 ```
 
-### 3.2 一个 GitRepo，两个 paths
+`config/` 目录里就是**普通清单**（**不要**放 `Chart.yaml` 或 `kustomization.yaml`）：
+```yaml
+# services/config/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  mode: raw-yaml
+  rendered-by: none
+```
+```yaml
+# services/config/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-config
+spec:
+  selector: {app: app-config}
+  ports:
+    - port: 80
+      targetPort: 80
+```
+
+### 3.2 一个 GitRepo，三个 paths
 
 ```yaml
 apiVersion: fleet.cattle.io/v1alpha1
@@ -98,34 +125,65 @@ spec:
   paths:
     - services/order      # Kustomize
     - services/payment    # Helm
+    - services/config     # 纯 YAML
   targetNamespace: demo-mixed
 ```
 
 ### 3.3 真实结果
 
 ```text
-GitRepo: mixed-demo   2/2
+GitRepo: mixed-demo   3/3
 
 Bundle:
+mixed-demo-services-config    1/1
 mixed-demo-services-order     1/1     ← path 斜杠换 - 生成 bundle 名
 mixed-demo-services-payment   1/1
 
 demo-mixed 命名空间:
-NAME                DATA
-order-shop-config   2
-payment-config      3
+NAME                 TYPE        DATA / PORT
+order-shop-config    ConfigMap   2
+payment-config       ConfigMap   2
+app-config           ConfigMap   2
+app-config           Service     ClusterIP  80/TCP
 ```
 
-两种工具的产物逐项对照（真实采集）：
+三种模式的产物逐项对照（真实采集）：
 
 | 服务 | 工具 | 产物 | 关键证据 |
 |------|------|------|----------|
 | order | Kustomize | `order-shop-config` | 名字带 `order-` 前缀 → `namePrefix` 生效；`data.rendered-by=kustomize` |
 | payment | Helm | `payment-config` | 标签 `helm.sh/chart=payment-0.1.0`；`data.rendered-by=helm`、`config=from-helm-values` |
+| config | 纯 YAML | `app-config`（ConfigMap + Service） | 无前缀、无 `helm.sh/chart`；`data.mode=raw-yaml`；Bundle 的 `spec.helm`/`spec.kustomize` 均为 `null` |
 
-两个服务在**同一个 GitRepo、同一个命名空间**里各自独立同步，互不干扰。
+三个服务在**同一个 GitRepo、同一个命名空间**里各自独立同步，互不干扰。
 
-### 3.4 怎么判断某个 Bundle 用了哪种工具
+### 3.4 纯 YAML 目录的行为（真实）
+
+`services/config` 里既没有 `Chart.yaml` 也没有 `kustomization.yaml`，Fleet 直接把目录里的每个 `*.yaml` 当 K8s 资源。真实采集——
+
+Bundle 的 spec（对比 Helm/Kustomize 的 bundle）：
+```text
+mixed-demo-services-config:
+  helm: null      kustomize: null
+  resources:
+    - configmap.yaml
+    - service.yaml
+```
+
+产物：
+```text
+app-config (ConfigMap): {"mode":"raw-yaml","rendered-by":"none"}   ← 原样应用，无任何模板渲染
+app-config (Service)  : labels {"app.kubernetes.io/managed-by":"Helm",
+                                "objectset.rio.cattle.io/hash":"..."}
+```
+
+要点：
+- **目录里所有 `*.yaml` / `*.yml` 都会被当成资源**（`configmap.yaml` + `service.yaml` 一起部署）。
+- 没有模板、没有渲染，**所见即所得**。
+- 即便纯 YAML，产物**仍带 `app.kubernetes.io/managed-by: Helm`**——因为 Fleet 把每个 bundle 都包成 Helm chart 部署（见 3.5 的提醒）。
+- `overlays/{name}` 是纯 YAML 场景的**特殊定制目录**（官方文档）：基目录放资源，`overlays/<名字>/` 放同名替换文件或 `_patch.` 补丁文件，实现"不引入 Kustomize 的定制"。
+
+### 3.5 怎么判断某个 Bundle 用了哪种工具
 
 看 Bundle 的 `spec` 最直接：
 
@@ -215,6 +273,7 @@ spec:
   bundles:
     - base: services/order       # Kustomize
     - base: services/payment     # Helm（目录含 Chart.yaml 或 fleet.yaml）
+    - base: services/config      # 纯 YAML
 ```
 
 ---
@@ -275,12 +334,13 @@ repo/
 # B. 按服务分区（每个服务自带工具）
 repo/
 ├── apps/order/        # kustomization.yaml
-└── apps/payment/      # Chart.yaml
+├── apps/payment/      # Chart.yaml
+└── apps/config/       # 纯 YAML
 
 # C. 混合（也是合法的）
 repo/
 ├── platform/          # 用 Helm 的第三方组件
-└── apps/<service>/    # 用 Kustomize 的自研服务
+└── apps/<service>/    # 用 Kustomize 或纯 YAML 的自研服务
 ```
 
 无论哪种，铁律只有一条：**一个 path 里只出现一种工具的标志文件**。
@@ -294,6 +354,7 @@ repo/
 | 一个 path 冒出意料外的资源 | 目录里同时有 `Chart.yaml` 和 `kustomization.yaml` | 只保留一种；或用 `fleet.yaml` 明确指定 |
 | 纯 Kustomize 资源也带 `managed-by: Helm` | Fleet 把所有 bundle 都包成 Helm chart 部署 | 正常现象；判断来源看 `helm.sh/chart` |
 | 某 path 把 `Chart.yaml`/`values.yaml` 也当资源 | 目录未被归类（歧义） | 见第 4 节 |
+| 纯 YAML 目录里的无关 yaml 也被部署 | 目录内所有 `*.yaml` 都会成为资源 | 用 `.fleetignore` 排除（如 CI 配置、示例文件） |
 | 改了 kustomize 却不生效 | GitRepo 指向的 path 不对（指到了仓库根而非 overlay） | paths 具体到含 `kustomization.yaml` 的目录 |
 | 混用后回滚/排查困难 | 没约定工具边界 | 按第 8 节固定布局 |
 
@@ -303,7 +364,7 @@ repo/
 
 1. **能混，且是原生的**：Fleet/ArgoCD 都**按 path 判定**工具，一个仓库、一个 GitRepo 可同时存在 Kustomize、Helm、纯 YAML。
 2. **判定规则**：目录里 `Chart.yaml`→Helm、`kustomization.yaml`→Kustomize、`fleet.yaml`→新 bundle、其余 `*.yaml`→原始资源。
-3. **真实实测**：`mixed-demo` GitRepo `2/2`，两个 bundle 分别用两种工具，同命名空间和平共处。
+3. **真实实测**：`mixed-demo` GitRepo `3/3`，三个 bundle 分别用 Kustomize、Helm、纯 YAML，同命名空间和平共处。
 4. **真实坑**：**同一个 path 同时放 `Chart.yaml` 和 `kustomization.yaml` → 判定混乱、两种产物都出现**。铁律：**一个 path 一种工具**。
 5. **显式控制**用 `fleet.yaml`（`helm:` / `kustomize:`，别同时写）或 GitRepo 的 `spec.bundles`。
 6. **想收敛**：用 Kustomize 的 `helmCharts:` 收编 Helm；反向做不到。
@@ -313,10 +374,10 @@ repo/
 
 ## 动手练习
 
-1. **最小混合**：建一个仓库，`services/a` 用 Kustomize（加 `namePrefix`）、`services/b` 用 Helm，一个 GitRepo 两个 paths，验证两个 bundle 各自 1/1。
+1. **最小混合**：建一个仓库，`services/a` 用 Kustomize（加 `namePrefix`）、`services/b` 用 Helm、`services/c` 放纯 YAML，一个 GitRepo 三个 paths，验证三个 bundle 各自 1/1。
 2. **判定实验**：在 `services/a` 里额外放一个 `Chart.yaml`，观察它变成什么、产物有何异常，然后还原。
 3. **fleet.yaml 显式指定**：给 Kustomize 目录加 `fleet.yaml` 的 `kustomize.dir` 指向 overlay，确认仍正常。
-4. **来源判定**：用 `kubectl get bundle -o jsonpath='{.spec.helm}'` 与产物标签，区分两个 bundle 各用了什么工具。
+4. **来源判定**：用 `kubectl get bundle -o jsonpath='{.spec.helm}'` 与产物标签，区分各 bundle（含纯 YAML）用了什么工具。
 5. **错误示范**：故意在同一目录放两种工具文件，记录 `spec.helm`/`spec.kustomize` 的值与产物，解释为什么不可预期。
 6. **收敛实验**：把 Helm 服务改成 Kustomize 的 `helmCharts:` 方式渲染，比较产物差异。
 7. **仓库组织**：为你手头的一个多服务仓库，画出第 8 节的 A/B/C 三种布局草案，选一种并说明理由。
