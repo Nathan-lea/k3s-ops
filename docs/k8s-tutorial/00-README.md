@@ -52,6 +52,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 28 GitOps 与 Helm 实战   │
                                               │ 29 私有仓库认证与安全    │
                                               │ 30 混用 Kustomize/Helm   │
+                                              │ 31 Ingress 与证书管理   │
                                               └──────────────────────┘
 ```
 
@@ -90,6 +91,7 @@ export KUBECONFIG=./kubeconfig
 | 28 GitOps 使用 Helm Chart 完整实战 | 24/25/26/27 | fleet.yaml/options、值合并顺序、共享 chart 多环境（显式 bundles）、chart 自包含与 valuesFiles 两个真实坑、对比选型 |
 | 29 GitOps 私有仓库认证与安全 | 26/27/28 | Fleet 三种 Git 认证（HTTP/SSH/GitHub App）、clientSecretName、CA/TLS、私有 Helm 仓库认证、Policy 与安全最佳实践 |
 | 30 混用 Kustomize 与 Helm | 25/27/28 | Fleet 按 path 判定工具、一个 GitRepo 混用 Kustomize/Helm/纯 YAML 三种模式实测、同一 path 混用的真实坑、fleet.yaml 显式指定、与 ArgoCD 对照及选型 |
+| 31 Ingress 深入与证书管理 | 04/21 | IngressClass/Controller 职责、pathType 与转发行为、rewrite/CORS/限流/会话保持/金丝雀注解全实测（含 4 个真实坑）、cert-manager 私有 CA 证书全流程、HTTPS/308/续期、排障清单 |
 
 ---
 
@@ -147,3 +149,4 @@ export KUBECONFIG=./kubeconfig
 | [28 GitOps 使用 Helm Chart 完整实战](28-GitOps与Helm完整实战.md) | fleet.yaml/options、值合并顺序、共享 chart 多环境、两个真实坑、对比选型 |
 | [29 GitOps 私有仓库认证与安全](29-GitOps私有仓库认证与安全.md) | 三种 Git 认证、clientSecretName 实测、CA/TLS、私有 Helm 仓库、Policy 与安全 |
 | [30 混用 Kustomize 与 Helm](30-混合使用Kustomize与Helm.md) | Fleet 按 path 判定、Kustomize/Helm/纯 YAML 三模式混合实测、同一 path 混用的坑、fleet.yaml 显式指定 |
+| [31 Ingress 深入与证书管理](31-Ingress深入实战与证书管理.md) | IngressClass/Controller、注解家族全实测与真实坑、cert-manager 私有 CA 证书链路、HTTPS/续期、排障清单 |
