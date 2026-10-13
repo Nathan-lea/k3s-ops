@@ -54,6 +54,12 @@ export KUBECONFIG=./kubeconfig
                                               │ 30 混用 Kustomize/Helm   │
                                               │ 31 Ingress 与证书管理   │
                                               │ 32 Rancher 多租户与RBAC  │
+                                              │ 33 Pod 生命周期与探针      │
+                                              │ 34 资源治理 QoS 与 HPA     │
+                                              │ 35 NetworkPolicy 实战       │
+                                              │ 36 故障排查 Runbook         │
+                                              │ 37 Gateway API 入门         │
+                                              │ 38 PDB 与节点维护           │
                                               └──────────────────────┘
 ```
 
@@ -94,6 +100,12 @@ export KUBECONFIG=./kubeconfig
 | 30 混用 Kustomize 与 Helm | 25/27/28 | Fleet 按 path 判定工具、一个 GitRepo 混用 Kustomize/Helm/纯 YAML 三种模式实测、同一 path 混用的真实坑、fleet.yaml 显式指定、与 ArgoCD 对照及选型 |
 | 31 Ingress 深入与证书管理 | 04/21 | IngressClass/Controller 职责、pathType 与转发行为、rewrite/CORS/限流/会话保持/金丝雀注解全实测（含 4 个真实坑）、cert-manager 私有 CA 证书全流程、HTTPS/308/续期、排障清单 |
 | 32 Rancher 多租户与 RBAC | 01/07/10 | Rancher 多租户模型（Global/Cluster/Project）、Users/RoleTemplate/Projects/Bindings、Namespace 归属、实操新用户授权、集群级授权、排障清单 |
+| 33 Pod 生命周期、探针与优雅终止 | 03 | Pod 生命周期、探针（liveness/readiness/startup）、preStop、terminationGracePeriodSeconds、滚动更新卡住排障 |
+| 34 资源治理、QoS与HPA实战 | 03/06 | requests/limits、QoS、LimitRange、ResourceQuota、HPA（CPU/Memory）、OOMKilled 排障 |
+| 35 NetworkPolicy网络隔离实战 | 04/07/32 | 网络隔离、Pod/Namespace Selector、Ingress/Egress、最小权限、流量验证（RBAC+网络双重边界） |
+| 36 Kubernetes故障排查实战Runbook | 03/04/07/08 | 常见故障类型、kubectl describe/events/logs、结构化排查链路、可复现案例 |
+| 37 GatewayAPI入门与实战 | 04/21/31 | Gateway API 核心资源、与 Ingress 对比、HTTPRoute/ReferenceGrant、NGINX Gateway Fabric 简单实测 |
+| 38 PodDisruptionBudget与节点维护实战 | 06/10 | PDB、drain/cordon/uncordon、Eviction、节点维护与可用性保障 |
 
 ---
 
@@ -153,3 +165,9 @@ export KUBECONFIG=./kubeconfig
 | [30 混用 Kustomize 与 Helm](30-混合使用Kustomize与Helm.md) | Fleet 按 path 判定、Kustomize/Helm/纯 YAML 三模式混合实测、同一 path 混用的坑、fleet.yaml 显式指定 |
 | [31 Ingress 深入与证书管理](31-Ingress深入实战与证书管理.md) | IngressClass/Controller、注解家族全实测与真实坑、cert-manager 私有 CA 证书链路、HTTPS/续期、排障清单 |
 | [32 Rancher 多租户与 RBAC](32-Rancher多租户与RBAC.md) | Rancher 多租户模型、CR 识别、项目/集群授权实操、Namespace 归属、排障清单 |
+| [33 Pod 生命周期、探针与优雅终止](33-Pod生命周期、探针与优雅终止.md) | Pod 生命周期、liveness/readiness/startupProbe、preStop、terminationGracePeriodSeconds、滚动更新卡住排障 |
+| [34 资源治理、QoS与HPA实战](34-资源治理、QoS与HPA实战.md) | requests/limits、QoS、LimitRange、ResourceQuota、HPA 基础与 OOMKilled 排障 |
+| [35 NetworkPolicy网络隔离实战](35-NetworkPolicy网络隔离实战.md) | 默认全通到最小权限、PodSelector/NamespaceSelector、Ingress/Egress、流量实测（RBAC+网络边界闭环） |
+| [36 Kubernetes故障排查实战Runbook](36-Kubernetes故障排查实战Runbook.md) | CrashLoopBackOff/ImagePull/ErrImagePull/OOMKilled/Pending/NodeNotReady/ReadinessFailed、结构化排障链路 |
+| [37 GatewayAPI入门与实战](37-GatewayAPI入门与实战.md) | Gateway/HTTPRoute/ReferenceGrant、与 Ingress 对比、NGINX Gateway Fabric 简单实测 |
+| [38 PodDisruptionBudget与节点维护实战](38-PodDisruptionBudget与节点维护实战.md) | PDB（minAvailable/maxUnavailable）、kubectl drain/cordon/uncordon、Eviction、可用性保障 |
