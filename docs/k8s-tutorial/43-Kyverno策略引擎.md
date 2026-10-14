@@ -422,17 +422,15 @@ Pod 卡在 `CreateContainerConfigError`。原因是：
 
 **这不是策略写错了，而是 mutate 的威力与风险**：它会改写工作负载，可能和"本来不兼容的镜像"冲突。
 
-修法二选一：
-
-1. 换一个**本来就以非 root 运行**的镜像（推荐）；
-2. 在策略/工作负载里额外指定 `runAsUser`，或干脆不放宽 `runAsNonRoot`。
+修法：换一个**本来就设计成非 root 运行**的镜像（不改策略）。
 
 我们换成 `nginxinc/nginx-unprivileged:1.27`（该镜像以 UID 101 运行、监听 8080，本章环境已有缓存）：
 
-> **环境回退**：如果你的节点拉不到 `nginxinc/nginx-unprivileged`，可以任选其一：
-> 换成其他**本身就是非 root** 的镜像；或仍用 `nginx:1.27` 但在 Pod 上显式加
-> `spec.securityContext.runAsUser: 101` 配合 `runAsNonRoot: true`。
-> 关键是"镜像的用户"和"`runAsNonRoot` 的要求"必须一致。
+> **环境回退**：如果你的节点拉不到 `nginxinc/nginx-unprivileged`，换任意一个本身就设计成非 root 运行的镜像（如 `bitnami/nginx`、`cgr.dev/chainguard/nginx`）。
+>
+> **不要**想当然地“给官方 `nginx:1.27` 加一句 `runAsUser: 101` 就完事”：实测会以 mkdir("/var/cache/nginx/client_temp") permission denied 退出——官方 nginx 还要写缓存、写 pid 并监听 80，都依赖 root。
+>
+> 能否非 root 运行是**镜像自身的属性**，不是 Pod 里加一个字段能补的。
 
 ```bash
 kubectl --kubeconfig ./kubeconfig -n policy-demo delete pod mutated
@@ -764,7 +762,7 @@ validate-policy.kyverno.svc failurePolicy=Fail
 1. `kubectl get clusterpolicy` 看 `READY`——若 `False`，`MESSAGE` 会写原因（多半是 YAML 结构错）。
 2. 看 `match` 是否真的命中：策略限定 `namespaces: [policy-demo]`，在别的命名空间测试当然不生效。
 3. `Enforce` 才拦人；`Audit` 只写报告。确认 `validationFailureAction`。
-4. 资源类型是否匹配：`kinds: [Pod]` 不匹配 `Deployment`（你要么改成 `Deployment`，要么给 Pod 模板加策略）。
+4. 资源类型是否匹配：**给 `Pod` 写的规则，Kyverno 会用 autogen 自动生成等价的控制器规则**（拦截信息里会报出带 `autogen-` 前缀的规则名，例如 `autogen-check-team-label`，以示这是自动生成的），所以 `kinds: [Pod]` **会**连带拦住 `Deployment`/`StatefulSet` 的 Pod 模板；反过来只写 `kinds: [Deployment]` 则拦不到裸 `Pod`。排障时先看 autogen 出来的规则。
 
 ### 10.2 PolicyReport 为空
 

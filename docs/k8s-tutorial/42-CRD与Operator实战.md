@@ -59,7 +59,7 @@ CRD + Controller = Operator
 
 本章你会**先写 CRD，再写 Controller**，最后把它跑在集群里验证自愈。
 
-本集群现在就有 **132 个 CRD**——几乎全是各种 Operator 装进来的：
+本集群现在就有 **130 多个 CRD**——几乎全是各种 Operator 装进来的：
 
 ```bash
 kubectl --kubeconfig ./kubeconfig get crd --no-headers | wc -l
@@ -229,7 +229,7 @@ FIELDS:
 
 ## 3. 看现成 Operator 的 CRD
 
-**CRD 数量**：本集群 132 个。它们几乎都是"某某 Operator"带进来的。
+**CRD 数量**：本集群 130 多个。它们几乎都是"某某 Operator"带进来的。
 
 **例子一：cert-manager**（第 31 章用过它签发证书）。
 先看它的 CRD 结构：
@@ -1178,7 +1178,8 @@ spec:
 
 ```bash
 cd ~/k3s-ops
-kubectl --kubeconfig ./kubeconfig create namespace operator-demo
+# 若命名空间已存在，kubectl 会报 AlreadyExists；`|| true` 吞掉非零退出，保证可重复执行
+kubectl --kubeconfig ./kubeconfig create namespace operator-demo || true
 kubectl --kubeconfig ./kubeconfig apply -f examples/webapp-operator/config/rbac
 kubectl --kubeconfig ./kubeconfig apply -f examples/webapp-operator/config/manager/deployment.yaml
 kubectl --kubeconfig ./kubeconfig -n operator-demo rollout status deploy/webapp-operator --timeout=120s
@@ -1194,7 +1195,7 @@ deployment.apps/webapp-operator created
 deployment "webapp-operator" successfully rolled out
 
 NAME                               READY   STATUS    RESTARTS   AGE   IP            NODE               NOMINATED NODE   READINESS GATES
-webapp-operator-669d76646f-kcc7n   1/1     Running   0          10s   10.42.1.185   k3s-demo-agent-1   <none>           <none>
+webapp-operator-764c7b57f4-fr5hg   1/1     Running   0          2s    10.42.1.210   k3s-demo-agent-1   <none>           <none>
 ```
 
 看启动日志：manager 起来了，watch 建立，worker 开始工作——**没有任何 forbidden / x509 错误**：
@@ -1246,15 +1247,15 @@ kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy,po -o wide
 
 ```text
 NAME          IMAGE               REPLICAS   READY   AGE
-demo-webapp   nginx:1.27-alpine   2          2       14s
+demo-webapp   nginx:1.27-alpine   2          2       16s
 
-NAME                              READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS   IMAGES                   SELECTOR
-deployment.apps/demo-webapp       2/2     2            2           15s    webapp       nginx:1.27-alpine        app.kubernetes.io/instance=demo-webapp
-deployment.apps/webapp-operator   1/1     1            1           2m24s  manager      webapp-operator:v0.1.0   app.kubernetes.io/name=webapp-operator
+NAME                              READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                   SELECTOR
+deployment.apps/demo-webapp       2/2     2            2           17s   webapp       nginx:1.27-alpine        app.kubernetes.io/instance=demo-webapp
+deployment.apps/webapp-operator   1/1     1            1           28s   manager      webapp-operator:v0.1.0   app.kubernetes.io/name=webapp-operator
 
 NAME                                   READY   STATUS    RESTARTS   AGE   IP            NODE                NOMINATED NODE   READINESS GATES
-pod/demo-webapp-78dfd877b7-gvhq7       1/1     Running   0          15s   10.42.0.125   k3s-demo-server-1   <none>           <none>
-pod/demo-webapp-78dfd877b7-vrpqs       1/1     Running   0          15s   10.42.1.186   k3s-demo-agent-1    <none>           <none>
+pod/demo-webapp-78dfd877b7-4xrld       1/1     Running   0          17s   10.42.1.211   k3s-demo-agent-1    <none>           <none>
+pod/demo-webapp-78dfd877b7-d5xsc       1/1     Running   0          17s   10.42.0.129   k3s-demo-server-1   <none>           <none>
 ```
 
 `get webapps -o wide` 里的 `IMAGE / REPLICAS / READY` 三列，就是第 4 节写的 printer columns。
