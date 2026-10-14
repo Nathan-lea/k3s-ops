@@ -28,6 +28,7 @@ k3s-ops 是一个面向 **k3s 全生命周期管理** 的运维项目，基于 *
 | 数据存储 | 嵌入式 etcd | 多 server 高可用 |
 | Ingress | nginx-ingress | 替代默认 Traefik |
 | UI 管理 | Rancher | 集群可视化管理 |
+| 策略引擎 | Kyverno | 策略即代码（validate/mutate/generate），教程第 43 章部署 |
 | Base OS | Ubuntu 22.04 (bento/ubuntu-22.04) | 统一基础镜像 |
 
 ---

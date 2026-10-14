@@ -12,6 +12,7 @@ k3s 全生命周期管理项目，基于 Vagrant + Ansible + VirtualBox 实现�
 - **Ingress**: nginx-ingress（替代默认 Traefik）
 - **管理 UI**: Rancher（部署在 k3s 集群上, NodePort 30443）
 - **Gateway API**: NGINX Gateway Fabric（教程第 37 章部署, NodePort 30025）
+- **策略引擎**: Kyverno（教程第 43 章部署, 命名空间 `kyverno`, 4 控制器钉在 agent-1）
 - **虚拟化**: VirtualBox >= 7.0
 
 ## 项目结构
@@ -97,7 +98,15 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 - 1 个 agent 节点: k3s-demo-agent-1 (192.168.56.20, 2c/4GB)
 - 数据存储: 嵌入式 etcd（单节点模式）
 - server-2 (192.168.56.11) 已被移除
-- 已部署组件: k3s, nginx-ingress, cert-manager, Rancher, Gateway API CRD (v1.4.1), NGINX Gateway Fabric (2.4.2)
+- 已部署组件: k3s, nginx-ingress, cert-manager, Rancher, Gateway API CRD (v1.4.1), NGINX Gateway Fabric (2.4.2), Kyverno (chart 3.9.1 / app v1.19.1)
+
+### Kyverno（策略引擎, 教程第 43 章）
+
+- **安装**：`helm install kyverno kyverno/kyverno -n kyverno --create-namespace --set global.nodeSelector."kubernetes\.io/hostname"=k3s-demo-agent-1 --wait --timeout 10m`
+- **组件**：4 个控制器（admission / background / cleanup / reports），各 1 副本，全部钉在 `k3s-demo-agent-1`；新增 20 个 CRD；webhook 7 validating + 3 mutating。
+- ⚠️ **单点风险**：webhook `failurePolicy=Fail`，控制器又全在唯一 agent 上；agent-1 不可用时，相关命名空间的**写入会被拦**（不是放行）。
+- **逃生（两步，顺序不可反）**：① `kubectl -n kyverno scale deploy --all --replicas=0`；② `kubectl delete validatingwebhookconfiguration,mutatingwebhookconfiguration -l webhook.kyverno.io/managed-by=kyverno`。恢复：`kubectl -n kyverno scale deploy --all --replicas=1`（控制器会自愈重建 webhook）。
+- **演示资源**：命名空间 `policy-demo` / `policy-demo-gen`，5 条 `ClusterPolicy`（详见第 43 章附录）。
 
 ### 关键操作说明
 
