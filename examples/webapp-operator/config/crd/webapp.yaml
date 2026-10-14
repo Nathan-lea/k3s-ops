@@ -1,0 +1,68 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: webapps.demo.example.com
+spec:
+  # 1) 归属哪个 API 组、哪个版本
+  group: demo.example.com
+  names:
+    kind: WebApp
+    listKind: WebAppList
+    plural: webapps
+    singular: webapp
+    shortNames:
+      - wa
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      # 2) 启用 status 子资源：spec 与 status 分开写入，控制器更新 status 不会碰到 spec
+      subresources:
+        status: {}
+      # 3) kubectl get webapps 时显示的额外列
+      additionalPrinterColumns:
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Replicas
+          type: integer
+          jsonPath: .spec.replicas
+        - name: Ready
+          type: integer
+          jsonPath: .status.readyReplicas
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      # 4) 结构性 schema：API Server 用它做校验与裁剪
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: WebApp 描述一个由控制器托管的无状态应用。
+          properties:
+            spec:
+              type: object
+              description: 期望状态，由用户书写。
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  minLength: 1
+                  description: 容器镜像。
+                replicas:
+                  type: integer
+                  format: int32
+                  default: 1
+                  minimum: 0
+                  maximum: 10
+                  description: 期望副本数，默认 1。
+                port:
+                  type: integer
+                  format: int32
+                  description: 容器端口（可选）。
+            status:
+              type: object
+              description: 观测状态，由控制器书写。
+              # 为便于手写阅读，这里不展开 conditions 的完整 schema；
+              # 若要像内置资源一样做严格校验，交由 controller-gen 从 Go 类型生成。
+              x-kubernetes-preserve-unknown-fields: true
