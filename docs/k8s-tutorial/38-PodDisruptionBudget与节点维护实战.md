@@ -354,7 +354,7 @@ k3s-demo-server-1   Ready    control-plane,etcd,master   140d   v1.30.2+k3s2
 
 ---
 
-## 8. Rancher 对照
+## 8. Rancher 界面对照
 
 | 路径 | 对应 kubectl | 用途 |
 |---|---|---|
@@ -368,7 +368,7 @@ k3s-demo-server-1   Ready    control-plane,etcd,master   140d   v1.30.2+k3s2
 
 ---
 
-## 9. 练习
+## 动手练习
 
 1. **预算换算**：某 Deployment 5 副本，`minAvailable: 60%`。当前 5 个健康副本时 `disruptionsAllowed` 是多少？4 个健康时呢？（提示：`min(currentHealthy - minAvailable, maxUnavailable)`，逐项写出）。
 2. **PDB 状态观察**：执行 `kubectl --kubeconfig ./kubeconfig -n pdb-demo get pod,pdb`，解释 `ALLOWED DISRUPTIONS: 0` 的含义与触发条件。
@@ -377,6 +377,19 @@ k3s-demo-server-1   Ready    control-plane,etcd,master   140d   v1.30.2+k3s2
 5. **drain 演练（⚠️ 高危，建议先在练习 namespace 隔离）**：给 `pdb-demo/app` 建 `maxUnavailable: 1` 的 PDB，对 agent-1 执行 `drain --timeout=60s`，对比与 `minAvailable: 2` 时的行为差异，然后按 §5.5 恢复。
 6. **原生 Eviction vs delete**：对比 `kubectl delete pod`（绕开 PDB 检查）与 Eviction（受 PDB 约束）对 `pdb-demo` 的差异，说明为什么"维护操作必须用 drain/Eviction 而不是 delete"。
 7. **排障口径**：写出"drain 卡住"的三步排查顺序（命令/查看对象/结论）。
+
+<details>
+<summary>参考答案</summary>
+
+1. `minAvailable: 60%` → 目标值 `ceil(5×60%) = 3`。5 个健康时 `allowed = 5-3 = 2`；4 个健康时 `allowed = 4-3 = 1`（`disruptionsAllowed` 取 `min(currentHealthy - minAvailable, maxUnavailable)`）。
+2. `ALLOWED DISRUPTIONS: 0` 表示当前**不允许**任何自愿驱逐：因为 2 个健康副本、`minAvailable: 2`，健康副本 − minAvailable = 0。
+3. `kubectl proxy` 后 `POST /api/v1/namespaces/pdb-demo/pods/<pod>/eviction` → HTTP **429**，message 为 `Cannot evict pod as it would violate the pod's disruption budget.`，Pod 未被删除。
+4. `cordon` agent-1 后新 Pod 调度到 **server-1**（agent-1 变成 `SchedulingDisabled`）；`uncordon` 后新 Pod 才可能回到 agent-1。
+5. `maxUnavailable: 1` 时 `allowed = 1`，`drain` 可驱逐 1 个 Pod 并推进；`minAvailable: 2`（`allowed = 0`）时 `drain` 被 PDB 拦截、反复重试直到超时。
+6. `kubectl delete pod` 直接删除、**绕开** PDB 检查；Eviction（`drain` 使用）会先经 PDB 校验。维护操作必须用 `drain`/Eviction 才能在保护可用性的前提下腾空节点。
+7. "drain 卡住"三步：① `kubectl get pdb -n <ns>` 看 `ALLOWED DISRUPTIONS` 是否为 0；② `kubectl get events`/`describe pod` 看驱逐是否被拒（PDB/裸 Pod/Finalizer）；③ 检查节点状态与残留 Pod，按结论处理（补副本、删 PDB/裸 Pod，或 `--force`）。
+
+</details>
 
 ---
 

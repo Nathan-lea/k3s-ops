@@ -456,4 +456,16 @@ kubectl get all -A -l app.kubernetes.io/part-of=shop
 3. **复现路线 B**：把练习 2 改成**每服务一个 GitRepo + 独立命名空间**，对比 CR 数量与资源落点。
 4. **Bundle 命名推演**：若 GitRepo 名叫 `team-a`，path 为 `apps/user/overlays/prod`，Bundle 名应该是什么？（提示：本节 6.2 的命名规则）
 5. **决策题**：公司有 30 个服务、5 个团队、3 套环境。你选结构 A/B/C？环境用目录还是分支？同步单元多细？（综合第 2/4/5/6 节作答）
-6. **复用题**：30 个服务的 base 都相同，你如何在"满足 Fleet path 自包含"的前提下避免复制 30 份？（提示：第 7 节的 Helm chart 方案）
+6. **复用题**：30 个服务的 base 都相同，你如何在“满足 Fleet path 自包含”的前提下避免复制 30 份？（提示：第 7 节的 Helm chart 方案）
+
+<details>
+<summary>参考答案</summary>
+
+1. 推荐 **结构 C（多仓团队自治）**：`team-a-deploy/`（含 svc1、svc2）、`team-b-deploy/`（含 svc3），每个仓库内为 `apps/<svc>/overlays/{dev,prod}/`。理由：团队权限天然隔离、变更爆炸半径小、各团队独立发布。
+2. 一个 GitRepo 的 `paths` 列两个服务路径 + 一个 `targetNamespace`；应用后 `get gitrepo` 显示 `2/2`、`get bundle` 出现 2 个 Bundle，两个 Deployment 落入**同一个**命名空间。
+3. 拆成两个 GitRepo（各带独立 `targetNamespace`）：CR 数量变 2、Bundle 也 2 个，资源分别落在两个命名空间、彼此生命周期独立。
+4. `team-a-apps-user-overlays-prod`（命名规则：`<GitRepo 名>-<path，斜杠换连字符>`）。
+5. 30 服务 / 5 团队 / 3 环境 → 选 **结构 B**（`apps/` 按团队再分 + `platform/` + `clusters/`）或 **结构 C**（每团队一仓）；环境用**目录**；同步单元按 **每服务一个 GitRepo**。
+6. 用 **Helm chart** 作为 base 打包单元（chart 自带模板，`helm template` 不依赖外部相对路径，天然满足 Fleet 的 path 自包含），overlay 只提供 values；或改用 `remote base`。
+
+</details>

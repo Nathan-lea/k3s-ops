@@ -293,7 +293,7 @@ ingress:
 
 ---
 
-## 5. Rancher 对照
+## 5. Rancher 界面对照
 
 在 Rancher UI 中也能查看和管理 NetworkPolicy：
 
@@ -307,7 +307,7 @@ ingress:
 
 ---
 
-## 6. 练习
+## 动手练习
 
 1. **全通验证**：按 §2.1-2.2 步骤复现“默认全通”，用 `wget` 直连 Pod IP 成功。
 2. **deny-all 生效**：应用 `deny-all` 后验证 client 无法访问 server 且 DNS 解析受影响，说明 Ingress+Egress 双向都被限制。
@@ -316,6 +316,41 @@ ingress:
 5. **只允许 Service 访问？**：思考“直接用 Pod IP 放行”和“通过 Service 名称访问”时 NetworkPolicy 的差异（提示：Service 本身不改 IP，策略匹配的是**源/目标 Pod 标签**）。
 6. **排障实战**：故意漏掉 client Egress 规则，仅保留 server Ingress，复现“连不上但规则貌似没错”的现象并用排障清单定位。
 7. **安全思考**：结合第 32 章（Rancher 多租户/RBAC），说明为什么“RBAC（谁能操作） + NetworkPolicy（谁能通网络）”才构成更完整的多租户安全边界。
+
+<details>
+<summary>参考答案</summary>
+
+1. 默认无策略时全通：`kubectl -n netpol-demo exec client -- wget -qO- <serverPodIP>` 成功。
+2. 应用 `deny-all`（`policyTypes: [Ingress, Egress]`）后 client → server 失败，且 **DNS 解析也受影响**——因为 Egress 也被默认拒绝，说明入/出两个方向都被限制。
+3. 补 server 的 Ingress 放行（`app: server` 允许 `app: client` 访问 TCP 80）+ client 的 Egress 放行（含 kube-dns UDP/TCP 53 + server TCP 80）后恢复；"双向配合"指：目的端要放行入口、来源端要放行出口，缺一不可。
+4. 最小化 YAML（放行 `monitor-ns` 抓 `app-ns` 的 `app: server:80`）：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitor
+  namespace: app-ns
+spec:
+  podSelector:
+    matchLabels:
+      app: server
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitor-ns
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+5. NetworkPolicy 匹配的是**源/目标 Pod 的标签**，不是 Service/VIP。经 Service 访问只是 DNAT 到后端 Pod，最终仍按 Pod 标签判定；"放行 Pod IP"可行但语义不清晰、IP 会变。
+6. 只留 server Ingress、漏 client Egress → 出口被 deny-all 拦截导致连不上；用排障清单**同时检查两侧策略**、`kubectl describe networkpolicy` 核对 selector 与方向。
+7. RBAC 管"谁能对 API 做操作"，NetworkPolicy 管"谁能通网络"；多租户要同时限制"操作面"与"网络面"才构成完整边界。
+
+</details>
 
 ---
 

@@ -508,4 +508,17 @@ $ curl -si -H 'Host: tls.lab.k3s.local' http://192.168.56.10:30080/
 4. 用 cert-manager 重建本章 CA 链（帮你自己的测试域名出证书），把根证书导到 `curl -k` 场景外（`--cacert`）验证 HTTPS 校验成功。
 5. 解释本章"HTTP 308 跳 HTTPS"发生的条件，并给出一种"HTTP/HTTPS 并存不跳转"的注解思路（提示：`ssl-redirect`/`force-ssl-redirect`）。
 6. 通过 Rancher UI 找到 ing-demo 的所有 Ingress 与 cert-manager 证书对象，对照 §5 的路径。
-7. 写出"金丝雀上线到回滚"的完整动作清单（含创建顺序、后端隔离、灰度验证、全量切换、删除金丝雀），并说明每一步对应的注解。
+7. 写出“金丝雀上线到回滚”的完整动作清单（含创建顺序、后端隔离、灰度验证、全量切换、删除金丝雀），并说明每一步对应的注解。
+
+<details>
+<summary>参考答案</summary>
+
+1. 多路径 Ingress，`/api/*` 配 `nginx.ingress.kubernetes.io/rewrite-target: /` 去掉前缀 → 后端拿到 `/` 返回 200；不 rewrite 时后端收到 `/api/...` 找不到路径 → 404。
+2. 配 `limit-rps: 1`（+ `limit-burst`）连发 10 个请求 → 前若干 200、其余 503；可用令牌桶模型解释（桶容量 = burst + 1，按 rps 补充）。
+3. 金丝雀坑：金丝雀后端被另一条 Ingress 当主后端 → 表现为"20/0 全主版本"且控制器输出 Warning；给金丝雀配**专属 Service**后恢复正常灰度。
+4. 用 cert-manager 重建 CA 链为自己域名签发证书，导出根证书后用 `curl --cacert ca.crt https://...` 校验成功（而非 `-k` 跳过）。
+5. 出现 308 跳转的条件：Ingress 配置了 TLS 且启用了 `ssl-redirect`/`force-ssl-redirect: true`；"HTTP/HTTPS 并存不跳转"→ 关闭该 redirect 注解（`ssl-redirect: "false"`）。
+6. Rancher UI → 对应 Project → 该命名空间的 Ingresses 与 cert-manager 证书对象，核对 §5 路径。
+7. 金丝雀动作清单：建金丝雀 Deployment + **专属** Service → 加带 `canary`/`canary-weight` 注解的 Ingress → 验证灰度比例 → 全量切换（主 Ingress 指向新版本）→ 删除金丝雀资源与注解。
+
+</details>

@@ -306,7 +306,21 @@ kubectl get pods -n kube-system | grep cilium
 
 ---
 
-## 8. 小结
+## 8. Rancher 界面对照
+
+Rancher UI 对"数据面属于哪一代（iptables / ipvs / eBPF）"**没有可视化入口**——因为本集群是 **k3s 导入型（imported）集群**，CNI 与 kube-proxy 模式在 k3s 安装时就确定了，Rancher 只负责"管"，不负责"配"。界面里能看到的只有节点层信息：
+
+| 想看什么 | Rancher 路径 | 说明 |
+|---|---|---|
+| 节点与角色 | 集群 → **Nodes** | 只能看到 server/agent 角色、状态、IP，**看不到** flannel/Cilium 字样 |
+| 节点详情 | Nodes → 点某节点 | 等价于节点级 `describe`，仍非数据面 |
+| 对照：Rancher 自建集群 | 创建 RKE2/RKE1 集群 → **Cluster Configuration → Networking** | 只有**通过 Rancher 新建**的 RKE2/RKE1 集群才能在 provisioning 阶段选 CNI（Canal/Calico/Cilium） |
+
+**结论**：判断"在第几代"只能靠命令行证据（第 11 章的 iptables 链、本章 §5 的 `/proc/net/ip_vs` 与 Cilium 探针），Rancher 界面帮不上忙——这也是本章开头强调"先用命令识别数据面"的原因。
+
+---
+
+## 9. 小结
 
 - **eBPF** = 内核里的可编程沙箱：验证器保证安全、事件驱动零闲置开销、热插拔
 - **kube-proxy 的痛点** = ClusterIP 是"规则里的假地址"：iptables 规则 O(n) + 随机概率 + conntrack 负担；ipvs 改进查找但不是根治（仍是 NAT）

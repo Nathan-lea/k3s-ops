@@ -303,7 +303,23 @@ curl <svc-lb>  /  kubectl get ep      # 端点空/规则问题 → 数据面
 
 ---
 
-## 7. 小结
+## 7. Rancher 界面对照
+
+Rancher UI 是"评估/切换 CNI"最直观的入口——但**只对 Rancher 自己创建的 RKE1/RKE2 集群有效**：
+
+| 场景 | Rancher 路径 | 能否改 CNI |
+|---|---|---|
+| 通过 Rancher **新建** RKE2/RKE1 集群 | 创建集群 → **Cluster Configuration → Networking** | ✅ 可选 CNI（Canal / Calico / Cilium / none）+ 自定义 Pod/Service CIDR |
+| **导入**已有集群（本 k3s 属于此类） | 集群 → **Nodes** | ❌ 无 CNI 选项，flannel 由 k3s 安装时确定 |
+
+所以：
+
+- 想看"本集群 CNI 长什么样（`flannel.1` / `cni0` / 路由表）"，Rancher 界面**看不到**，只能用本章 §4 的节点命令（`ip -d link` / `ip route` / `kubectl describe node` 上的 `flannel.alpha.coreos.com/*` 注解）。
+- 想**换 CNI**（§5），最干净的方式是用 Rancher 起一个 RKE2 集群、在 Networking 里选目标 CNI；对 k3s 导入集群则需在 k3s 侧改配置（风险高，建议重建）。
+
+---
+
+## 8. 小结
 
 - **CNI = 规范 + 插件 + 配置 + IPAM**：运行时（containerd）按 conflist 调插件，插件建 veth/网桥/隧道并分配 IP
 - **Pod 网络诞生流程**：kubelet → 沙箱 → CNI ADD → PodIP 回报；**Pod 重建 IP 会变**（IPAM）

@@ -362,3 +362,16 @@ ArgoCD 的仓库 Secret 需带标签 `argocd.argoproj.io/secret-type: repository
 5. **CA 场景**：为自签 Git 服务配 `caBundle`，对比不配时的 x509 报错。
 6. **Helm 对照**：用 `helmSecretName` + `helmRepoURLRegex` 拉一个私有 OCI chart，观察 regex 不匹配时凭据不转发导致失败。
 7. **安全审查**：审计本仓库，确认没有任何 `values`/`valuesFiles` 里含明文密码，敏感项都走了 `valuesFrom`。
+
+<details>
+<summary>参考答案</summary>
+
+1. 不加认证：GitRepo 状态报 `authentication required`（克隆失败）；加 `clientSecretName` 指向含 `username`/`password` 的 Secret 后成功。
+2. **仍会失败**：Fleet 只在**与 GitRepo 相同的命名空间**查找引用的 Secret。Secret 建在 `default`、GitRepo 在 `fleet-local` 时找不到凭据。
+3. 改成不存在的 Secret 名 → 报错与"完全没配"一致（都是找不到/无法认证），说明"名字写错"和"没配"在现象上难以区分，需核对 Secret 是否存在。
+4. SSH 路线：本地 `ssh-keygen -m PEM` 生成密钥 → 公钥加到 Git 服务的 Deploy Key → 建 `kubernetes.io/ssh-auth` Secret（`ssh-privatekey` + `known_hosts`）→ GitRepo 用 `clientSecretName` 引用。
+5. 自签证书不配 `caBundle` → `x509: certificate signed by unknown authority`；配好 `caBundle` 后克隆成功。
+6. `helmSecretName` 需配合 `helmRepoURLRegex` 才把凭据转发到**匹配该正则**的仓库 URL；regex 不匹配 → 凭据不转发 → 拉取鉴权失败。
+7. 审查：`grep -rniE 'password|token|secret' <仓库>`，确认 `values`/`valuesFiles` 无明文，敏感项统一走 `valuesFrom`（Secret/ConfigMap）。
+
+</details>

@@ -281,7 +281,7 @@ Waiting for deployment "web" rollout to finish: 1 out of 2 new replicas have bee
 
 ---
 
-## 7. Rancher 对照
+## 7. Rancher 界面对照
 
 在 Rancher UI 中也能直观查看探针配置与 Pod 状态：
 
@@ -296,7 +296,7 @@ Waiting for deployment "web" rollout to finish: 1 out of 2 new replicas have bee
 
 ---
 
-## 8. 练习
+## 动手练习
 
 1. **基础验证**：按 §3 步骤复现 `web` Deployment，分别用 `describe` 查看 `Liveness` 与 `Readiness` 的真实参数并用自己的话解释两者差异。
 2. **readiness 模拟失效**：临时在 Pod 内将 nginx 停止（`kubectl exec` 进入容器执行 `nginx -s stop` 或 `pkill nginx`），观察 `READY` 变为 `0/1`、Service Endpoints 是否变化，再恢复后观察回归。
@@ -305,6 +305,19 @@ Waiting for deployment "web" rollout to finish: 1 out of 2 new replicas have bee
 5. **参数调优练习**：为一个“慢启动”（需 15 秒初始化）的应用设计探针：给出 `startupProbe` + `livenessProbe` 的参数建议并说明理由（避免 liveness 过早误杀）。
 6. **滚动更新卡住排障**：故意把 readiness 路径配错（如 `/healthz` 但实际不存在），执行 `kubectl rollout restart`，观察卡住现象并用排障清单定位原因。
 7. **综合思考**：为什么 `readinessProbe` 失败**不会**重启容器，而 `livenessProbe` 失败**一定**会重启容器？结合“流量接收”与“进程存活”这两个视角回答。
+
+<details>
+<summary>参考答案</summary>
+
+1. `kubectl -n probe-demo describe pod web-<hash> | grep -iA3 probe`；readiness 决定 Pod 是否进入 Service Endpoints（能否接流量），liveness 决定容器是否被重启（进程是否存活）。
+2. 容器内 `nginx -s stop`/`pkill nginx` 后 `READY` 变 `0/1`，`kubectl get endpoints` 里该 Pod IP 被摘除；恢复 nginx 后重归 `1/1` 并回到 Endpoints。
+3. 停掉 nginx 后 liveness 连续失败超过 `failureThreshold` → 容器被 kubelet 重启，`RESTARTS` 计数增加（Pod 名通常不变，重建的是容器）。
+4. 删除 Pod 时按序捕捉到：`preStop hook running` → `SIGTERM received` → `done`（对应 preStop 执行 → 主进程收到 SIGTERM → 优雅退出完成）。
+5. 慢启动应用建议：`startupProbe`（如 `period=5s`、`failureThreshold=6`，允许约 30s 启动）+ `livenessProbe`（`period=5s`、`failureThreshold=3`）；startup 通过前不触发 liveness，避免"还没启动就被杀"。
+6. readiness 路径配错 → Pod `Running` 但 `0/1` → 新 ReplicaSet 始终不可用，`rollout status` 卡住、`describe deploy` 显示进度停止；修正路径后恢复。
+7. readiness 失败只是"暂时不接收流量"（从 Endpoints 摘除），进程仍活着，重启无意义；liveness 失败代表进程"假死/卡死"，必须重启才能恢复服务。
+
+</details>
 
 ---
 

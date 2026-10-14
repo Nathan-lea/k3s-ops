@@ -455,7 +455,7 @@ GOLD-BACKEND
 
 ---
 
-## 8. Rancher 对照
+## 8. Rancher 界面对照
 
 Rancher UI 对 Gateway API 的支持有限（跟随上游版本），对照思路如下：
 
@@ -470,7 +470,7 @@ Rancher UI 对 Gateway API 的支持有限（跟随上游版本），对照思�
 
 ---
 
-## 9. 练习
+## 动手练习
 
 1. **模型复述**：用一句话分别解释 GatewayClass、Gateway、HTTPRoute、ReferenceGrant 的职责与作用域（集群级/命名空间级）。
 2. **版本核对**：执行 `kubectl --kubeconfig ./kubeconfig api-resources | grep gateway.networking`，说出哪些资源是 v1、哪个仍是 v1beta1，为什么。
@@ -479,6 +479,19 @@ Rancher UI 对 Gateway API 的支持有限（跟随上游版本），对照思�
 5. **改 serviceType 实验**：若把 NGF 改为 `ClusterIP`（去掉 nodePorts）再创建 Gateway，观察 Service 类型变化与可达性，理解 Listener 与 Service 的联动。
 6. **Ingress 对照**：在第 31 章 Ingress 上实现同样的 host 路由，对比两套 YAML 的复杂度与"状态反馈"差异（`kubectl describe` 看两类资源的状态字段）。
 7. **清理演练**：按附录清理命令卸载 NGF 与演示命名空间，验证 6 个 CRD 删除后 `gatewayclass` 查询为空。
+
+<details>
+<summary>参考答案</summary>
+
+1. **GatewayClass**（集群级，绑定某个控制器实现）；**Gateway**（命名空间级，定义监听器与外部入口）；**HTTPRoute**（命名空间级，定义主机/路径路由规则）；**ReferenceGrant**（命名空间级，授权**跨命名空间**的对象引用）。
+2. `kubectl api-resources | grep gateway.networking`：`gatewayclasses/gateways/httproutes/grpcroutes/backendtlspolicies` 为 **v1**；`referencegrants` 仍为 **v1beta1**（standard 通道中它尚未升到 v1，属于演进较慢的 API）。
+3. 新建 `route-v2`（`hostnames: [v2.local]`、`path: /api` 前缀 → `web`），`curl -H "Host: v2.local" http://<node>:30025/api` → 200；`curl -H "Host: v2.local" http://<node>:30025/` → 404（不匹配 `/api` 前缀）。
+4. 删除 `gold` 的 ReferenceGrant → `route-gold` 的 `ResolvedRefs` 变为 `RefNotPermitted`、访问返回 500；恢复 ReferenceGrant → 变回 `Resolved`、返回后端内容。
+5. 把 NGF 改为 `ClusterIP`（去掉 nodePorts）重建 Gateway → 生成的 Service 变为 `ClusterIP`，**集群外不可达**，只能集群内访问。说明 Listener 的暴露方式由 NGF 的 Service 类型决定。
+6. Ingress host 路由 vs HTTPRoute：HTTPRoute 支持更细的匹配（方法/头/查询/权重）与更丰富的状态反馈（`status.parents` 的 `conditions`）；Ingress 依赖注解拼装、状态字段少。
+7. 清理：`helm uninstall ngf -n nginx-gateway` + 删除三个命名空间 + 删除 6 个 CRD，之后 `kubectl get gatewayclass` 为空。
+
+</details>
 
 ---
 

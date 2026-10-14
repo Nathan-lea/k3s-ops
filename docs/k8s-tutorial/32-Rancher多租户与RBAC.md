@@ -366,3 +366,16 @@ spec:
 5. **CR 对照 UI**：在 Rancher UI 找到对应页面（Projects/Members/Cluster Members/Users），逐一核对你用 `kubectl` 查到的同名对象。
 6. **故障模拟**：故意把 PRTB 建到错误的 Namespace（业务 ns 而非 backing ns），观察报错并总结原因。
 7. **全局视角**：根据 `globalrolebindings` 判断谁是平台全局管理员，并说明全局管理员与 `cluster-owner` 的区别。
+
+<details>
+<summary>参考答案</summary>
+
+1. 盘点：`kubectl get projects.management.cattle.io -A`、`kubectl get ns -o json | jq '.items[].metadata.labels["field.cattle.io/projectId"]'`、`kubectl get projectrolebindings.management.cattle.io -A`、`kubectl get clusterrolebindings.management.cattle.io`。
+2. 建用户 `lab32-tester` → 建 PRTB 指向 `p-2wztg`、角色 `project-readonly` → `kubectl get prtb -A` 确认对象存在 → 练习后删除 PRTB 与用户。
+3. 修改目标 ns 的 `field.cattle.io/projectId` 标签可改变其所属 Project，改回即还原——"命名空间隶属"由该标签决定。
+4. `cluster-member`：集群级只读成员，能查看集群范围内资源；`project-member`：仅在某个 Project 内按角色操作（如 `project-readonly`/`project-member`/`project-owner`）。集群角色覆盖面更大。
+5. UI 对照：Rancher → Cluster → Projects/Namespaces、Cluster → Members、Users，逐一核对 `kubectl` 查到的同名 CR。
+6. PRTB 建到**业务命名空间**会报错；PRTB 必须建在 Rancher 的 **backing namespace**（`c-xxxxx` / `p-xxxxx`），因为它属于 management 层对象。
+7. `kubectl get globalrolebindings.management.cattle.io` → 绑定 `admin`/`cluster-owner` 等的用户即全局/集群管理员。区别：**全局管理员**对所有集群与全局资源有权限；`cluster-owner` 只对**某一个集群**拥有完全权限。
+
+</details>

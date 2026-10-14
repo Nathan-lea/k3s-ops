@@ -260,7 +260,7 @@ HPA 只有在指标可用（Metrics Server 正常运行）时才能计算扩缩�
 
 ---
 
-## 7. Rancher 对照
+## 7. Rancher 界面对照
 
 在 Rancher UI 中可直观查看资源配置与 HPA：
 
@@ -276,7 +276,7 @@ HPA 只有在指标可用（Metrics Server 正常运行）时才能计算扩缩�
 
 ---
 
-## 8. 练习
+## 动手练习
 
 1. **QoS 判定**：按 §2.2 复现 Burstable，修改为 `requests==limits`（Guaranteed），用 `describe pod` 验证 QoS 类别变化并解释判定规则。
 2. **requests vs limits 差异**：创建两个容器（一个只设 requests、一个只设 limits、不设的情况），观察 QoS 分类并说明调度/运行时差异。
@@ -285,6 +285,19 @@ HPA 只有在指标可用（Metrics Server 正常运行）时才能计算扩缩�
 5. **OOMKilled 模拟**：创建内存 limits 较小（如 32Mi）的 busybox，运行 `dd if=/dev/zero of=/tmp/big bs=1M count=100`，观察 Pod 是否变为 `OOMKilled`、ExitCode 137。
 6. **HPA 行为推理**：假设当前 2 副本，CPU 平均利用率 120%，目标 50%，maxReplicas 5，计算期望副本数并解释是否会触发扩容。
 7. **Metrics 可用性排障**：执行 `kubectl --kubeconfig ./kubeconfig top nodes` 和 `kubectl --kubeconfig ./kubeconfig top pods -n hpa-demo`，确认指标可采集；若 `top` 超时，思考可能原因并给出排查思路。
+
+<details>
+<summary>参考答案</summary>
+
+1. 令单容器 `requests==limits`（cpu/memory 都设）→ QoS 变为 `Guaranteed`；`kubectl -n hpa-demo describe pod ... | grep 'QoS Class'` 验证。
+2. 只设 `requests` → `Burstable`；只设 `limits`（未设 requests 时 requests 默认等于 limits，所有资源都如此则为 `Guaranteed`）；两者都不设 → `BestEffort`。调度按 **requests**，运行时上限按 **limits**。
+3. 不带 `resources` 的新建 Pod 会被 LimitRange 注入默认 `requests`/`limits`（仅对**新建** Pod 生效，已存在的不会改）。
+4. 创建第 6 个 Pod 被拒，报错类似：`exceeded quota: rq, requested: pods=1, used: pods=5, limited: pods=5`。
+5. busybox（`limits.memory: 32Mi`）跑 `dd if=/dev/zero of=/tmp/big bs=1M count=100` → 触发 `OOMKilled`，`ExitCode 137`。
+6. 期望副本 = `ceil(当前副本 × 当前利用率 / 目标利用率)` = `ceil(2 × 120% / 50%)` = `ceil(4.8)` = **5**（≤ maxReplicas 5），会扩容到 5。
+7. `top nodes` / `top pods` 能正常返回即指标可用；若超时：查 `kube-system` 的 `metrics-server` 是否 Ready、`kubectl get apiservice v1beta1.metrics.k8s.io`、看 metrics-server 日志与网络连通性。
+
+</details>
 
 ---
 

@@ -539,4 +539,15 @@ kubectl delete ns demo-kustomize
    a) 给公司应用做 dev/prod 两套环境差异；
    b) 安装开源项目 cert-manager；
    c) 自己的服务要能一条命令回滚到上周版本。
-5. **预习题**：想象一下，如果有个工具能"盯住 Git 仓库，仓库一变就自动 apply"，Kustomize 渲染和 Helm 渲染在这个流程里各扮演什么角色？（答案在第 26 章）
+5. **预习题**：想象一下，如果有个工具能“盯住 Git 仓库，仓库一变就自动 apply”，Kustomize 渲染和 Helm 渲染在这个流程里各扮演什么角色？（答案在第 26 章）
+
+<details>
+<summary>参考答案</summary>
+
+1. 新建 `overlays/dev/kustomization.yaml`（`resources: [../../base]` + `namePrefix: dev-` + `replicas: - name: nginx-demo  count: 1` + `commonLabels: {env: dev}`），执行 `kustomize build overlays/dev` 对比 `overlays/prod`：dev 版资源名多 `dev-` 前缀、副本数为 1、标签多 `env: dev`。
+2. 在 overlay 里用 `patches` 改 Service 的 `spec.ports[0].nodePort` 为 31999，`kustomize build overlays/prod | grep nodePort` → 输出 `31999`。
+3. 删掉 base 的 `matchLabels` 后**仍能**渲染：`commonLabels` 会同时给 `spec.selector.matchLabels` 与 Pod 模板标签注入 `env: dev`，选择器不会丢；但若用的是普通 `labels:` 字段（新写法），它**不会**穿透到选择器，才会出现"selector 为空"的坑。
+4. a) **Kustomize**（同一 base 的 dev/prod 差异）；b) **Helm**（安装开源项目用社区 chart）；c) **Helm**（`helm rollback` 一条命令回滚到指定 revision）。
+5. GitOps 工具负责"盯住 Git、拉取变更"；**Kustomize/Helm 是渲染器**，把声明渲染成最终清单后交给工具 apply。二者处在"渲染"环节，GitOps 是"驱动"环节。
+
+</details>

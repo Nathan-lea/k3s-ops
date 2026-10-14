@@ -560,3 +560,16 @@ Fleet 还有独立的 `HelmOp` 资源，用于**只引用外部 chart、不在 G
 5. **跨目录踩坑**：把 chart 移到 `charts/`，在 `envs/dev/fleet.yaml` 写 `chart: ../../charts/web-app`，观察真实报错并解释原因。
 6. **Kustomize 对照**：把本章例子改写成 Kustomize（`base` + `overlays/prod`），对比两种写法的文件数量与可读性。
 7. **凭据安全**：把某个值改成从 Secret 读取（`valuesFrom.secretKeyRef`），验证不把密码写进 Git 也能生效。
+
+<details>
+<summary>参考答案</summary>
+
+1. 目录含 `Chart.yaml` + `fleet.yaml`，GitRepo 的 `paths` 指向该目录；部署后 `kubectl -n <ns> get deploy -o yaml | grep helm.sh/chart` 能看到 `helm.sh/chart: <name>-<version>`。
+2. 只写 `valuesFiles: [values-prod.yaml]` 而**不写** `helm.chart` 时，Fleet 不把它当 Helm chart，replicas 不生效；补上 `helm.chart: .` 后走 Helm 渲染，replicas 才生效（这就是"坑 2"）。
+3. 用 `spec.bundles`（`base: app` + `options: dev.yaml` / `prod.yaml`）→ 生成 2 个 Bundle，资源分别落入 dev/prod 两个命名空间。
+4. 只改 `values-prod.yaml` 并 push → 只有 prod 对应的 Bundle 更新，dev 不变（Bundle 是独立同步单元）。
+5. 报错：chart 路径必须在 Fleet 的 path 范围内、不支持 `../../` 跨出目录 → 违反"每个 path 自包含"约束。
+6. Kustomize 版文件更少、无模板语法、可读性强；Helm 版参数化复用强，适合参数多、多环境差异大的场景。
+7. `valuesFrom.secretKeyRef` 从 Secret 取值注入 values，仓库里只留 Secret 引用、不留明文，密码不进 Git 也能生效。
+
+</details>

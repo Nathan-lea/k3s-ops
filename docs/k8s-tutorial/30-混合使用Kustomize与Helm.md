@@ -360,7 +360,23 @@ repo/
 
 ---
 
-## 10. 小结
+## 10. Rancher 界面对照
+
+本章"一个仓库混用三种模式"在 Rancher 的 **Continuous Delivery** 界面里，呈现粒度是 **Bundle（每个 path 一个）**，所以三种模式**各成一行、互不干扰**：
+
+| 你在 YAML 里写的 | Rancher CD 界面看到的 |
+|---|---|
+| `services/a`（Kustomize） | GitRepo 下的一个 **Bundle**，独立 status |
+| `services/b`（Helm） | 另一个 **Bundle** |
+| `services/c`（纯 YAML） | 第三个 **Bundle** |
+
+- 路径：**Continuous Delivery → Git Repos → 点开对应 GitRepo**，下方列出它生成的全部 **Bundles**；每个 Bundle 的 Ready 状态与资源数**独立显示**，**一个 path 失败不会体现在另一个 Bundle 上**（对应 §2"Bundle 是隔离单元"）。
+- 混合模式在界面上的价值就是"**多行、互不干扰**"：Helm 服务升级、Kustomize 服务改动，各自只影响自己的 Bundle。
+- §4 那个"同一 path 混用两种工具"的坑，在界面上表现为**该 Bundle 的资源与预期不符**——UI **不会**告诉你用了哪个渲染器，要确认仍需 `kubectl get bundle -o jsonpath`（§4/§5）。
+
+---
+
+## 11. 小结
 
 1. **能混，且是原生的**：Fleet/ArgoCD 都**按 path 判定**工具，一个仓库、一个 GitRepo 可同时存在 Kustomize、Helm、纯 YAML。
 2. **判定规则**：目录里 `Chart.yaml`→Helm、`kustomization.yaml`→Kustomize、`fleet.yaml`→新 bundle、其余 `*.yaml`→原始资源。
@@ -381,3 +397,16 @@ repo/
 5. **错误示范**：故意在同一目录放两种工具文件，记录 `spec.helm`/`spec.kustomize` 的值与产物，解释为什么不可预期。
 6. **收敛实验**：把 Helm 服务改成 Kustomize 的 `helmCharts:` 方式渲染，比较产物差异。
 7. **仓库组织**：为你手头的一个多服务仓库，画出第 8 节的 A/B/C 三种布局草案，选一种并说明理由。
+
+<details>
+<summary>参考答案</summary>
+
+1. 一个 GitRepo 列 `services/a`（Kustomize）、`services/b`（Helm）、`services/c`（纯 YAML）三个 path → 生成 3 个 Bundle，各自 `1/1`。
+2. 在 `services/a` 放一个 `Chart.yaml` → Fleet 把它判定为 **Helm chart**，原 Kustomize 目录被当 chart 渲染，产物结构异常（渲染失败或资源变化）；删掉 `Chart.yaml` 即恢复。
+3. `fleet.yaml` 里写 `kustomize.dir: overlays/prod` 显式指定 kustomize 目录 → 仍能正常渲染，用于"目录不在根"的场景。
+4. `kubectl get bundle <name> -o jsonpath='{.spec.helm}'` 非空 → Helm；为空但 `{.spec.kustomize}` 有值 → Kustomize；两者都空 → 纯 YAML（直接 apply）。
+5. 同一目录同时放 Kustomize 与 Helm 文件 → `spec.helm`/`spec.kustomize` 取值不可预期、产物混乱；**一个 path（Bundle）只能一种模式**。
+6. 用 Kustomize 的 `helmCharts:` 渲染 Helm chart：产物与直接 Helm 渲染基本等价，但需开启 `--enable-helm`，且失去 Helm release 记录。
+7. 按第 8 节画 A/B/C 三份布局草案，依据"规模 / 团队数 / 复用需求"选型并说明理由。
+
+</details>

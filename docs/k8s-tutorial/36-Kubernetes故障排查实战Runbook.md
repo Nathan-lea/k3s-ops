@@ -251,7 +251,7 @@ kubectl --kubeconfig ./kubeconfig get pod <pod> -n <ns> -o yaml | grep -B2 -A5 f
 
 ---
 
-## 9. Rancher 对照
+## 9. Rancher 界面对照
 
 Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 
@@ -268,7 +268,7 @@ Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 
 ---
 
-## 10. 练习
+## 动手练习
 
 1. **黄金链路演练**：任选 `probe-demo` 命名空间的 web Pod，按 §1.2 顺序依次执行 events（命名空间内）、`describe pod`、`logs`，用自己的话总结当前健康状态的证据链。
 2. **事件排序练习**：执行 `kubectl --kubeconfig ./kubeconfig get events -A --sort-by=.metadata.creationTimestamp | tail -30`，找出最近 3 条 Warning/Normal 并推测其含义。
@@ -278,6 +278,20 @@ Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 6. **Terminating 卡住分析**：区分“preStop/SIGTERM 超时”和“Finalizer 阻塞”这两种情况的判断方法及处理原则（强调风险控制）。
 7. **Runbook 实战**：基于 §8 模板，从 `kubectl --kubeconfig ./kubeconfig get events -A --sort-by=.metadata.creationTimestamp | tail -20` 中任选一条事件填写一份最简 Runbook（现象→证据→可能根因→验证思路）。
 8. **节点压力排障**：执行 `kubectl --kubeconfig ./kubeconfig top nodes` 和 `kubectl --kubeconfig ./kubeconfig describe node k3s-demo-server-1 | grep -A5 Conditions`，判断当前节点是否存在压力，给出结论和依据。
+
+<details>
+<summary>参考答案</summary>
+
+1. 黄金链路：`kubectl -n probe-demo get events` → `kubectl -n probe-demo describe pod web-<hash>` → `kubectl -n probe-demo logs web-<hash>`，从事件到现状再到日志形成证据链。
+2. `kubectl get events -A --sort-by=.metadata.creationTimestamp | tail -30`，任取最近 3 条 Warning（如 `FailedScheduling`/`BackOff`）结合资源与命名空间推测含义。
+3. CrashLoopBackOff 排查顺序：① `describe pod` 看 `Last State`/`ExitCode`/Events → ② `logs --previous` 看**上一次**崩溃输出（最关键）→ ③ 检查 command/args/配置挂载 → ④ 检查依赖（下游服务、ConfigMap/Secret、镜像）。先查 `--previous` 是因为当前容器可能还没产生日志或已重启。
+4. OOMKilled 三个证据：`describe` 的 `Last State: Terminated, Reason: OOMKilled, ExitCode 137`；`logs` 在中途被截断；`top`/监控显示内存逼近 `limits`。
+5. Pending 三种原因：① 资源不足（`describe` Events `Insufficient cpu/memory`）；② 节点选择/污点不匹配（`FailedScheduling: node(s) didn't match nodeSelector/taints`）；③ 未绑定存储（`pod has unbound immediate PersistentVolumeClaims`）。
+6. preStop/SIGTERM 超时：`describe` 长时间 `Terminating`、`terminationGracePeriodSeconds` 到期后强杀；Finalizer 阻塞：`kubectl get pod -o yaml` 的 `metadata.finalizers` 非空。处理原则：优先排查根因（节点/CSI），谨慎手动移除 finalizer，避免数据损坏。
+7. 按 §8 模板填写：现象（事件原文）→ 证据（describe/logs）→ 可能根因 → 验证思路。
+8. `top nodes` 看 CPU/内存使用率；`describe node | grep -A5 Conditions` 看 `MemoryPressure/DiskPressure/PIDPressure` 是否 `False`——若均为 `False` 且 `Ready True`，则节点健康、无压力。
+
+</details>
 
 ---
 

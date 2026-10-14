@@ -587,3 +587,14 @@ Rancher 里 Fleet 的界面就是 **Continuous Delivery**（持续交付）页�
 3. **漂移实验**：练习 2 完成后，手动 `kubectl scale deploy xxx --replicas=3`，观察 GitRepo 状态变成 Modified；再开启 correctDrift，看它拉回 1。
 4. **对比题**：ArgoCD 的 `selfHeal` 与 Fleet 的 `correctDrift` 行为是一样的（默认只报不改）。想想为什么两个项目都不约而同把"自动修复"设为**默认关闭**？哪些场景应该开、哪些场景必须关？（提示：在线故障处理、临时调试、数据库类有状态服务）
 5. **选型判断题**：公司已有 Rancher 管着 40 个集群，要上一套 GitOps——选 Fleet 还是 ArgoCD？如果公司禁用 Rancher、纯开源栈呢？（答案在第 5 节）
+
+<details>
+<summary>参考答案</summary>
+
+1. 五个环节：**拉取**（`gitjob` 克隆仓库）→ **渲染**（Kustomize/Helm 渲染清单）→ **成包**（生成 Bundle / Content）→ **应用**（BundleDeployment 下发、agent apply）→ **对账**（周期性比对期望与实际并上报 status）。
+2. 关键命令：`kubectl -n fleet-local get gitrepo`（看 `BUNDLEDEPLOYMENTS-READY`）、`kubectl get bundle`、`kubectl -n <ns> get deploy,svc`、`curl` 验证 200，最后 `kubectl -n fleet-local delete gitrepo <name>` 触发反向清理。
+3. `kubectl -n <ns> scale deploy <name> --replicas=3` 后，`get gitrepo` 的 STATUS 变 `Modified`（漂移检测）；把 `spec.correctDrift.enabled` 置 `true`，Fleet 会把副本拉回 1（自动修复）。
+4. 默认关闭是为**安全**：自动修复会抹掉排障期间的人工临时改动，对有状态服务（数据库）可能造成意外的可用性/数据风险。**生产**常开以获得强一致；**排障、调试、有状态场景**谨慎开或关。
+5. 已有 Rancher 多集群 → **Fleet**（Rancher 内置、零额外运维、天生多集群）；纯开源/不用 Rancher → **ArgoCD**（独立部署、生态成熟、UI 与定制能力强）。
+
+</details>
