@@ -110,6 +110,7 @@ export KUBECONFIG=./kubeconfig
 | 39 Pod 安全与安全上下文 | 03/07/32/33 | securityContext、Pod Security Admission（privileged/baseline/restricted）、seccomp/AppArmor、restricted 合规改造 |
 | 40 StatefulSet 与有状态应用 | 03/05/20/38 | Headless Service、稳定网络标识与 DNS、volumeClaimTemplates、有序扩缩与 partition 灰度、PVC 回收坑 |
 | 41 Gateway API 进阶实战 | 21/31/37 | HTTPRoute 进阶匹配、流量权重切分、Filters 改写、超时与 backendRefs 语义、GRPCRoute/TLSRoute 现状 |
+| 42 CRD 与 Operator 实战 | 03/15/31/39 | CRD 结构与 schema/printer columns/status 子资源、声明式与调谐循环、Go + controller-runtime 自写控制器、镜像导入集群、删对象自动重建的自愈验证 |
 
 ---
 
@@ -178,3 +179,4 @@ export KUBECONFIG=./kubeconfig
 | [39 Pod 安全与安全上下文](39-Pod安全与安全上下文.md) | securityContext 字段体系、PSA 三档与 enforce/warn/audit、seccomp/AppArmor、privileged 拦截与 restricted 合规改造 |
 | [40 StatefulSet 与有状态应用](40-StatefulSet与有状态应用.md) | Headless Service/DNS、volumeClaimTemplates 独立 PVC、有序创建/缩容、重建复用同卷、partition 灰度与 PDB 联动 |
 | [41 Gateway API 进阶实战](41-GatewayAPI进阶实战.md) | 权重金丝雀、header/query 匹配、URLRewrite 与头改写、timeouts、Ingress 迁移对照、GRPCRoute/TLSRoute 现状 |
+| [42 CRD 与 Operator 实战](42-CRD与Operator实战.md) | CRD 拆解（schema/printer columns/status 子资源）、调谐循环与幂等、Go+controller-runtime 自写小控制器、镜像导入、删对象自愈 |

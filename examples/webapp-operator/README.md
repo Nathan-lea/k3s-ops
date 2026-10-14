@@ -45,9 +45,10 @@ docker build -t webapp-operator:v0.1.0 .
 docker save -o /tmp/webapp-operator-v0.1.0.tar webapp-operator:v0.1.0
 ```
 
-集群没有内网 registry，所以直接把镜像文件传到节点并导入 containerd：
+集群没有内网 registry，所以直接把镜像文件传到节点并导入 containerd（`vagrant` 命令在仓库根目录 `~/k3s-ops` 下执行）：
 
 ```bash
+cd ~/k3s-ops
 vagrant upload /tmp/webapp-operator-v0.1.0.tar /tmp/webapp-operator-v0.1.0.tar k3s-demo-agent-1
 vagrant ssh k3s-demo-agent-1 -- "sudo k3s ctr images import /tmp/webapp-operator-v0.1.0.tar"
 vagrant ssh k3s-demo-agent-1 -- "sudo k3s ctr images ls -q | grep webapp-operator"
