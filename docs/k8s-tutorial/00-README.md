@@ -107,6 +107,7 @@ export KUBECONFIG=./kubeconfig
 | 36 Kubernetes 故障排查实战 Runbook | 03/04/07/08 | 常见故障类型、kubectl describe/events/logs、结构化排查链路、可复现案例 |
 | 37 Gateway API 入门与实战 | 04/21/31 | Gateway API 核心资源、与 Ingress 对比、HTTPRoute/ReferenceGrant、NGINX Gateway Fabric 简单实测 |
 | 38 PodDisruptionBudget 与节点维护实战 | 06/10 | PDB、drain/cordon/uncordon、Eviction、节点维护与可用性保障 |
+| 39 Pod 安全与安全上下文 | 03/07/32/33 | securityContext、Pod Security Admission（privileged/baseline/restricted）、seccomp/AppArmor、restricted 合规改造 |
 
 ---
 
@@ -172,3 +173,4 @@ export KUBECONFIG=./kubeconfig
 | [36 Kubernetes 故障排查实战 Runbook](36-Kubernetes故障排查实战Runbook.md) | CrashLoopBackOff/ImagePull/ErrImagePull/OOMKilled/Pending/NodeNotReady/ReadinessFailed、结构化排障链路 |
 | [37 Gateway API 入门与实战](37-GatewayAPI入门与实战.md) | Gateway/HTTPRoute/ReferenceGrant、与 Ingress 对比、NGINX Gateway Fabric 简单实测 |
 | [38 PodDisruptionBudget 与节点维护实战](38-PodDisruptionBudget与节点维护实战.md) | PDB（minAvailable/maxUnavailable）、kubectl drain/cordon/uncordon、Eviction、可用性保障 |
+| [39 Pod 安全与安全上下文](39-Pod安全与安全上下文.md) | securityContext 字段体系、PSA 三档与 enforce/warn/audit、seccomp/AppArmor、privileged 拦截与 restricted 合规改造 |
