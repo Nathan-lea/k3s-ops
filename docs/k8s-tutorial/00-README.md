@@ -111,6 +111,7 @@ export KUBECONFIG=./kubeconfig
 | 40 StatefulSet 与有状态应用 | 03/05/20/38 | Headless Service、稳定网络标识与 DNS、volumeClaimTemplates、有序扩缩与 partition 灰度、PVC 回收坑 |
 | 41 Gateway API 进阶实战 | 21/31/37 | HTTPRoute 进阶匹配、流量权重切分、Filters 改写、超时与 backendRefs 语义、GRPCRoute/TLSRoute 现状 |
 | 42 CRD 与 Operator 实战 | 03/15/31/39 | CRD 结构与 schema/printer columns/status 子资源、声明式与调谐循环、Go + controller-runtime 自写控制器、镜像导入集群、删对象自动重建的自愈验证 |
+| 43 Kyverno 策略引擎 | 24/35/39/42 | PSA 的边界与分层、Kyverno 架构（四控制器 + 20 CRD）、validate/mutate/generate 三类策略实测、PolicyReport 合规报告、Kyverno CLI 离线测试、failurePolicy 与逃生/卸载 |
 
 ---
 
@@ -180,3 +181,4 @@ export KUBECONFIG=./kubeconfig
 | [40 StatefulSet 与有状态应用](40-StatefulSet与有状态应用.md) | Headless Service/DNS、volumeClaimTemplates 独立 PVC、有序创建/缩容、重建复用同卷、partition 灰度与 PDB 联动 |
 | [41 Gateway API 进阶实战](41-GatewayAPI进阶实战.md) | 权重金丝雀、header/query 匹配、URLRewrite 与头改写、timeouts、Ingress 迁移对照、GRPCRoute/TLSRoute 现状 |
 | [42 CRD 与 Operator 实战](42-CRD与Operator实战.md) | CRD 拆解（schema/printer columns/status 子资源）、调谐循环与幂等、Go+controller-runtime 自写小控制器、镜像导入、删对象自愈 |
+| [43 Kyverno 策略引擎](43-Kyverno策略引擎.md) | validate/mutate/generate 三类策略、Enforce 拦截与 Audit 报告、PolicyReport、Kyverno CLI 离线测试、PSA 分层、failurePolicy 逃生与卸载 |

@@ -67,6 +67,11 @@ Kyverno 不是唯一选择（还有 OPA Gatekeeper / KubeArmor 等），但它�
 
 ## 3. 安装 Kyverno
 
+> **前置条件（宿主资源）**：Kyverno 的四个控制器加起来约占 1 个 CPU 核与数百 MB 内存，
+> 且本教程把运行负载钉在工作节点上。请确保**宿主机至少空闲 4 核 CPU、4 GB 内存**，
+> 否则 k3s 可能因资源饥饿被系统强制重启（表现为 `kubectl` 间歇性 `connection refused`）。
+> 这不是 Kyverno 的 bug，而是"小机器上再叠一层"的常见现象。
+
 ### 3.1 安装前先看基线（避免"以为装了其实没装"）
 
 ```bash
@@ -83,6 +88,10 @@ NO_KYVERNO_CRD
 
 本部署环境不能直连 Docker Hub/GCR，但 **`reg.kyverno.io` 可达**。Kyverno 控制器共 6 个镜像。
 **先把镜像拉到工作节点**，可以避免 `helm install --wait` 卡在拉镜像上：
+
+> **环境提示**：这一步是**为离线/受限网络环境**准备的。如果你的节点能直连
+> `reg.kyverno.io`（或 `ghcr.io`），可以**跳过本节**，直接进入 3.3；拉镜像的工作
+> 交给 `helm install` 即可。另外该循环是**顺序**执行，6 个镜像首次可能超过 15 分钟，别中断。
 
 ```bash
 for img in kyverno kyvernopre background-controller cleanup-controller reports-controller readiness-checker; do
@@ -278,7 +287,8 @@ spec:
 ### 4.4 应用并确认就绪
 
 ```bash
-kubectl --kubeconfig ./kubeconfig create namespace policy-demo
+# 若命名空间已存在，kubectl 会报 AlreadyExists；末尾 `|| true` 吞掉非零退出，保证可重复执行
+kubectl --kubeconfig ./kubeconfig create namespace policy-demo || true
 kubectl --kubeconfig ./kubeconfig apply \
   -f ~/kyverno-policies/policies/require-team-label.yaml \
   -f ~/kyverno-policies/policies/disallow-latest-tag.yaml \
@@ -419,6 +429,11 @@ Pod 卡在 `CreateContainerConfigError`。原因是：
 
 我们换成 `nginxinc/nginx-unprivileged:1.27`（该镜像以 UID 101 运行、监听 8080，本章环境已有缓存）：
 
+> **环境回退**：如果你的节点拉不到 `nginxinc/nginx-unprivileged`，可以任选其一：
+> 换成其他**本身就是非 root** 的镜像；或仍用 `nginx:1.27` 但在 Pod 上显式加
+> `spec.securityContext.runAsUser: 101` 配合 `runAsNonRoot: true`。
+> 关键是"镜像的用户"和"`runAsNonRoot` 的要求"必须一致。
+
 ```bash
 kubectl --kubeconfig ./kubeconfig -n policy-demo delete pod mutated
 kubectl --kubeconfig ./kubeconfig -n policy-demo run mutated \
@@ -431,7 +446,7 @@ kubectl --kubeconfig ./kubeconfig -n policy-demo exec mutated -- id
 实测输出：
 
 ```text
-pod "mutated" deleted
+pod "mutated" deleted from policy-demo namespace
 pod/mutated created
 true
 uid=101(nginx) gid=101(nginx) groups=101(nginx)
@@ -485,8 +500,8 @@ spec:
 ```bash
 kubectl --kubeconfig ./kubeconfig apply -f ~/kyverno-policies/policies/generate-default-networkpolicy.yaml
 kubectl --kubeconfig ./kubeconfig label namespace policy-demo policy-demo=true --overwrite
-kubectl --kubeconfig ./kubeconfig create namespace policy-demo-gen
-kubectl --kubeconfig ./kubeconfig label namespace policy-demo-gen policy-demo=true
+kubectl --kubeconfig ./kubeconfig create namespace policy-demo-gen || true
+kubectl --kubeconfig ./kubeconfig label namespace policy-demo-gen policy-demo=true --overwrite
 sleep 10
 kubectl --kubeconfig ./kubeconfig -n policy-demo-gen get networkpolicy
 ```
@@ -538,7 +553,7 @@ spec:
 第 4 节的 `require-resources` 是 **Audit** 模式：它不拦 Pod，只把结果写进 **PolicyReport**。
 
 `good` 这个 Pod（第 4 节创建）带了 `team` 标签、用 `nginx:1.27`，但**没设 resources**。
-先看报告：
+先看这个命名空间里的全部报告：
 
 ```bash
 kubectl --kubeconfig ./kubeconfig -n policy-demo get policyreport
@@ -547,11 +562,20 @@ kubectl --kubeconfig ./kubeconfig -n policy-demo get policyreport
 实测输出：
 
 ```text
-NAME                                   KIND   NAME   PASS   FAIL   WARN   ERROR   SKIP   AGE
-c77c63be-0e04-460d-b6ec-c6dee1afc653   Pod    good   2      1      0      0       0      2s
+NAME                                   KIND   NAME      PASS   FAIL   WARN   ERROR   SKIP   AGE
+841c6e66-3802-4cf4-8eac-1ddb70502321   Pod    mutated   3      1      0      0       0      2m19s
+98e07f6e-fd0e-4354-91a5-19c89bfdf15a   Pod    good      2      1      0      0       0      2m42s
 ```
 
-`PASS=2`（过了标签与镜像两条）、`FAIL=1`（没过 resources）。看细节：
+`good` 是 `PASS=2`（过了标签与镜像两条）、`FAIL=1`（没过 resources）。
+另一个 `mutated`（第 5 节创建）是 `PASS=3`——它比 `good` **多一条**，多出来的正是
+`add-managed-by-label` 这条 **mutate** 策略记的 `pass`：**mutate 生效时也会在报告里留一条记录**。
+
+> 为什么 `good` 没有那条 mutate 记录？因为 `good` 在 mutate 策略**应用之前**就创建了，
+> 而报告记录的是"**对象写入时**匹配到的策略结果"；后台重扫间隔默认 **1 小时**
+> （`--backgroundScanInterval=1h`），所以一节课的时间里 `good` 的报告不会变。
+
+看 `good` 的细节：
 
 ```bash
 kubectl --kubeconfig ./kubeconfig -n policy-demo get policyreport -o yaml
@@ -597,14 +621,15 @@ scope:
   name: good-resources
 summary:
   fail: 0
-  pass: 3
+  pass: 4
 ```
 
-`pass: 3` —— 三个策略全过。**这就验证了 Audit 策略在两个方向上都正确**：
-缺 resources 记 `fail`，有 resources 记 `pass`。
+`pass: 4` —— 四条全过（三个 validate 策略 + `add-managed-by-label` 的 mutate）。
+**这就验证了 Audit 策略在两个方向上都正确**：缺 resources 记 `fail`，有 resources 记 `pass`。
 
-> **报告的归属**：PolicyReport 是 namespaced 的（每条对应一个对象，名字是一串 UUID）；
-> 集群级对象（如 Namespace）的汇总报告是 `ClusterPolicyReport`。报告由 reports-controller 聚合。
+> **报告的归属**：PolicyReport 是 namespaced 的（每条对应一个对象，名字是一串 UUID，**每次重建都不同**，
+> 阅读时只需关注 `KIND`/`NAME` 列）；集群级对象（如 Namespace）的汇总报告是 `ClusterPolicyReport`。
+> 报告由 reports-controller 聚合。
 
 ---
 
@@ -925,7 +950,7 @@ validate(Enforce)：bad-no-label → 拦（require-team-label）
                    bad-latest   → 拦（disallow-latest-tag）
                    good         → 放行
 validate(Audit)  ：good（无 resources）        → PolicyReport pass:2 fail:1
-                   good-resources（有 limits） → PolicyReport pass:3 fail:0
+                   good-resources（有 limits） → PolicyReport pass:4 fail:0
 mutate           ：nginx:1.27 → CreateContainerConfigError（runAsNonRoot vs root 镜像）
                    nginx-unprivileged:1.27 → Running，uid=101，managed-by=kyverno
 generate         ：新命名空间 policy-demo-gen 自动获得 default-deny NetworkPolicy
