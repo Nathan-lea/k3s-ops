@@ -608,10 +608,14 @@ summary:
 再对照一个**合规**的 Pod（有 requests+limits）：
 
 ```bash
-kubectl --kubeconfig ./kubeconfig -n policy-demo run good-resources --image=nginx:1.27 \
+kubectl --kubeconfig ./kubeconfig -n policy-demo run good-resources --image=nginxinc/nginx-unprivileged:1.27 \
   --labels=team=platform --restart=Never \
-  --overrides='{"spec":{"containers":[{"name":"good-resources","image":"nginx:1.27","resources":{"requests":{"cpu":"100m"},"limits":{"cpu":"200m"}}}]}}'
+  --overrides='{"spec":{"containers":[{"name":"good-resources","image":"nginxinc/nginx-unprivileged:1.27","resources":{"requests":{"cpu":"100m"},"limits":{"cpu":"200m"}}}]}}'
 ```
+
+> 这里**继续用非 root 镜像**，理由见 5.1：否则 `add-managed-by-label` 注入的 `runAsNonRoot: true`
+> 会把这个 `nginx` Pod 卡在 `CreateContainerConfigError`——报告（只看准入结果）仍是 `pass`，
+> 但 Pod 实际起不来。**策略判定"合规"≠ Pod 一定能跑**，这是两个层面。
 
 实测该 Pod 的报告是：
 
