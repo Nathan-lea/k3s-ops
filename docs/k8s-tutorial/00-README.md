@@ -109,6 +109,7 @@ export KUBECONFIG=./kubeconfig
 | 38 PodDisruptionBudget 与节点维护实战 | 06/10 | PDB、drain/cordon/uncordon、Eviction、节点维护与可用性保障 |
 | 39 Pod 安全与安全上下文 | 03/07/32/33 | securityContext、Pod Security Admission（privileged/baseline/restricted）、seccomp/AppArmor、restricted 合规改造 |
 | 40 StatefulSet 与有状态应用 | 03/05/20/38 | Headless Service、稳定网络标识与 DNS、volumeClaimTemplates、有序扩缩与 partition 灰度、PVC 回收坑 |
+| 41 Gateway API 进阶实战 | 21/31/37 | HTTPRoute 进阶匹配、流量权重切分、Filters 改写、超时与 backendRefs 语义、GRPCRoute/TLSRoute 现状 |
 
 ---
 
@@ -176,3 +177,4 @@ export KUBECONFIG=./kubeconfig
 | [38 PodDisruptionBudget 与节点维护实战](38-PodDisruptionBudget与节点维护实战.md) | PDB（minAvailable/maxUnavailable）、kubectl drain/cordon/uncordon、Eviction、可用性保障 |
 | [39 Pod 安全与安全上下文](39-Pod安全与安全上下文.md) | securityContext 字段体系、PSA 三档与 enforce/warn/audit、seccomp/AppArmor、privileged 拦截与 restricted 合规改造 |
 | [40 StatefulSet 与有状态应用](40-StatefulSet与有状态应用.md) | Headless Service/DNS、volumeClaimTemplates 独立 PVC、有序创建/缩容、重建复用同卷、partition 灰度与 PDB 联动 |
+| [41 Gateway API 进阶实战](41-GatewayAPI进阶实战.md) | 权重金丝雀、header/query 匹配、URLRewrite 与头改写、timeouts、Ingress 迁移对照、GRPCRoute/TLSRoute 现状 |
