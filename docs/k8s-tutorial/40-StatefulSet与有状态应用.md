@@ -66,7 +66,7 @@ volumeClaimTemplates:
           storage: 100Mi
 ```
 
-与 `volumes:` 的差别：`volumes` 里的 `emptyDir` 随 Pod 生命周期消失；`volumeClaimTemplates` 生成的 PVC **独立于 Pod 存在**——Pod 删了，PVC 还在（后面 §7 会实测这个"坑"）。
+与 `volumes:` 的差别：`volumes` 里的 `emptyDir` 随 Pod 生命周期消失；`volumeClaimTemplates` 生成的 PVC **独立于 Pod 存在**——Pod 删了，PVC 还在（§6 的"不变性"与 §8 的删 STS 都是实测这个"坑"）。
 
 ---
 
@@ -228,7 +228,7 @@ web-2   1/1     Running   web-8695b9fdb6        ← 只更新了 web-2
 
 验证没问题后把 `partition` 调小（如 `0`），后续副本才会继续滚动——这就是"有状态应用的灰度发布"。
 
-> **父级与 Owner 关系**：StatefulSet 通过 `ownerReference` 管理这些 Pod 和 PVC。`kubectl delete sts web` 会级联删除 Pod，但**默认不会删 PVC**（见 §8）。
+> **父级与 Owner 关系**：StatefulSet 通过 `ownerReference` **级联删除 Pod**；而 `volumeClaimTemplates` 生成的 PVC 在默认 `persistentVolumeClaimRetentionPolicy: Retain` 下**不会**获得指向 StatefulSet 的 ownerRef，因此 `kubectl delete sts web` 不会删除它们（仅当显式设置 `whenDeleted: Delete` 才随 StatefulSet 回收）。详见 §8。
 
 ---
 

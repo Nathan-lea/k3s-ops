@@ -248,7 +248,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web
-          image: nginx:latest
+          image: nginx:1.27
           ports:
             - containerPort: 80
           securityContext:
@@ -270,7 +270,7 @@ spec:
 kubectl --kubeconfig ./kubeconfig apply -f ~/k3s-ops/tmp/ch39-restricted-deploy.yaml
 kubectl --kubeconfig ./kubeconfig -n podsec-demo get pod -l app=podsec-web -o wide
 # NAME                          READY   STATUS    IP            NODE
-# podsec-web-ddf47cc67-shntv    1/1     Running   10.42.1.167   k3s-demo-agent-1
+# podsec-web-fc698b5d-4bpx9    1/1     Running   10.42.1.183   k3s-demo-agent-1
 ```
 
 逐项验证安全设置**确实生效**：
@@ -325,7 +325,7 @@ kubectl --kubeconfig ./kubeconfig -n podsec-demo exec $POD -- sh -c 'cat /proc/n
 
 ## 8. seccomp 与 AppArmor
 
-`restricted` 档只强制 `seccompProfile: RuntimeDefault`（收窄系统调用面）。AppArmor 需按需启用。
+`restricted` 档要求 `seccompProfile.type` 为 `RuntimeDefault`（也接受 `Localhost`，见 §5 的真实报错原文），用于收窄系统调用面。AppArmor 需按需启用。
 
 **节点内核支持情况（本集群实测）：**
 
@@ -454,7 +454,7 @@ pod/privileged created
 **4. 合规工作负载实测：**
 
 ```text
-podsec-web-ddf47cc67-shntv   1/1   Running   10.42.1.167   k3s-demo-agent-1
+podsec-web-fc698b5d-4bpx9   1/1   Running   10.42.1.183   k3s-demo-agent-1
 runAsNonRoot=true runAsUser=101 seccomp=RuntimeDefault
 $ id                          → uid=101(nginx) gid=101(nginx) groups=101(nginx)
 $ grep CapEff /proc/1/status  → CapEff:	0000000000000000

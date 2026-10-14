@@ -243,7 +243,7 @@ curl -s -D - -o /dev/null -H 'Host: rewrite.local' http://192.168.56.10:30025/ap
 
 ## 6. 超时与 backendRefs 失败语义
 
-`HTTPRouteRule.timeouts` 控制网关到后端的超时（Support: Extended，本集群 NGF 支持）：
+`HTTPRouteRule.timeouts` 控制网关到后端的超时（`Support: Extended`）：
 
 ```yaml
 rules:
@@ -256,6 +256,16 @@ rules:
 
 - `request`：从网关收到请求到返回响应的**总**预算；
 - `backendRequest`：网关到后端**单次**调用的预算（重试时每次单独计算）。
+
+> 字段是否真正生效由**实现**决定，可用 GatewayClass 的 `supportedFeatures` 核对（本集群真实输出，节选）：
+>
+> ```bash
+> kubectl --kubeconfig ./kubeconfig get gatewayclass nginx -o jsonpath='{range .status.supportedFeatures[*]}{.name}{" "}{end}'
+> # BackendTLSPolicy GRPCRoute Gateway ... HTTPRoutePathRewrite HTTPRouteResponseHeaderModification
+> # HTTPRouteQueryParamMatching HTTPRouteMethodMatching HTTPRouteRequestMirror ...
+> ```
+>
+> 列表里**没有单独的 timeouts 项**——`timeouts` 已是 HTTPRoute 核心字段，实现支持与否不以独立 feature 名列出；要确认超时行为，最稳妥是配一个慢后端实测。顺带可见 `HTTPRoutePathRewrite`、`HTTPRouteResponseHeaderModification` 等 feature，正对应 §5 用到的两个 filter。
 
 **失败语义**（本集群 CRD 描述原文可查证）：若一个规则的所有 `backendRefs` 都无效且规则无 filter，则**所有**匹配流量收到 **HTTP `500`**（gRPC / `GRPCRoute` 场景对应 `UNAVAILABLE`）。部分后端无效时，**本应发往无效后端的那部分请求按权重比例收到 `500`**（例如两个后端各 50%、其一失效，则约 50% 的请求返回 `500`），同时该路由 `status` 触发 `ResolvedRefs=False`：
 
@@ -274,7 +284,7 @@ kubectl --kubeconfig ./kubeconfig explain httproutes.gateway.networking.k8s.io.s
 
 ## 7. GRPCRoute / TLSRoute 现状
 
-本章环境已安装的 Gateway API CRD（v1）：
+本章环境已安装的 Gateway API CRD（其中 `gatewayclasses`/`gateways`/`httproutes`/`grpcroutes`/`backendtlspolicies` 为 `v1`，`referencegrants` 为 `v1beta1`）：
 
 ```bash
 kubectl --kubeconfig ./kubeconfig api-resources | grep gateway.networking
@@ -290,7 +300,7 @@ kubectl --kubeconfig ./kubeconfig api-resources | grep gateway.networking
 
   即按 `service/method`（而非 URL 路径）路由，天然支持 gRPC 的流量切分/金丝雀。
 
-- **TLSRoute**：本集群**未安装**对应 CRD（属于 Gateway API 的 **experimental 通道**，标准通道不含）。TCP/TLS 透传类需求要用它时需要额外安装 experimental CRD，且需数据面支持。
+- **TLSRoute**：本集群**未安装**对应 CRD。在本集群所用的 Gateway API v1.4.x 中，TLSRoute 属于 **experimental 通道**（标准通道不含），因此安装 CRD 时未包含它；需注意该定位是**版本相关**的——自 **Gateway API v1.5.0 起 TLSRoute 已转入标准通道**。TCP/TLS 透传类需求要用它时需额外安装对应 CRD，且需数据面支持。
 - **BackendTLSPolicy**：已安装，用于规定网关到**后端**的 TLS（如后端是 HTTPS 的场景）。
 
 > 结论：HTTP/HTTPS 用 `HTTPRoute`，gRPC 用 `GRPCRoute`（都已具备）；纯 TCP/TLS 透传要评估 `TLSRoute`（当前未装）。
