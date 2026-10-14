@@ -43,7 +43,7 @@ Kyverno 不是唯一选择（还有 OPA Gatekeeper / KubeArmor 等），但它�
 **Kyverno 就是这套模式的产物**。它做两件事：
 
 1. 注册一大堆自家 CRD：`ClusterPolicy`/`Policy`（策略）、`PolicyException`（豁免）、
-   `UpdateRequest`（generate 的内部对象）、`PolicyReport`（报告）等——实测本章集群里 Kyverno **新增了 20 个 CRD**。
+   `UpdateRequest`（generate 的内部对象）、`PolicyReport`（报告）等——实测本章集群里 Kyverno **新增了 22 个 CRD**。
 2. 跑若干个控制器，每个管一件事：
 
 | 控制器 | 职责 | 本章会看到它 |
@@ -95,7 +95,7 @@ NO_KYVERNO_CRD
 
 ```bash
 for img in kyverno kyvernopre background-controller cleanup-controller reports-controller readiness-checker; do
-  vagrant ssh k3s-demo-agent-1 -- "sudo k3s ctr images pull reg.kyverno.io/kyverno/$img:v1.19.1"
+  vagrant ssh k3s-demo-agent-1 -c "sudo k3s ctr images pull reg.kyverno.io/kyverno/$img:v1.19.1"
 done
 ```
 
@@ -134,7 +134,7 @@ The following components have been installed in your cluster:
 
 ```bash
 kubectl --kubeconfig ./kubeconfig get pods -n kyverno -o wide
-kubectl --kubeconfig ./kubeconfig get crd | grep -ci kyverno
+kubectl --kubeconfig ./kubeconfig get crd | grep -Eci "kyverno|wgpolicyk8s"
 ```
 
 实测输出：
@@ -145,10 +145,10 @@ kyverno-admission-controller-695bb65876-j47sd    1/1     Running   0          85
 kyverno-background-controller-754d5d8744-rlp4q   1/1     Running   0          85s   10.42.1.194   k3s-demo-agent-1
 kyverno-cleanup-controller-5df7946f7-sctx7       1/1     Running   0          85s   10.42.1.193   k3s-demo-agent-1
 kyverno-reports-controller-bbd7b5c48-d2tvj       1/1     Running   0          85s   10.42.1.192   k3s-demo-agent-1
-20
+22
 ```
 
-四个 Pod 全部调度到 `k3s-demo-agent-1`（`nodeSelector` 生效），新增 **20 个 CRD**。
+四个 Pod 全部调度到 `k3s-demo-agent-1`（`nodeSelector` 生效），新增 **22 个 CRD**（跨 4 个 API group：`kyverno.io`、`policies.kyverno.io`、`reports.kyverno.io`、`wgpolicyk8s.io`）。
 
 Kyverno 还装了一个 `kyverno-pre` **initContainer**（就是上面预拉的 `kyvernopre` 镜像），
 以及一批 **Webhook 配置**（后面"排障"要用）：
@@ -781,7 +781,7 @@ validate-policy.kyverno.svc failurePolicy=Fail
 ### 10.4 逃生：策略把集群拦死了怎么办（**已实测**）
 
 > **关键陷阱**：Kyverno 的准入控制器会**自愈重建自己的 Webhook 配置**。
-> 实测：只删 Webhook，15 秒内 7 个 validating + 3 个 mutating 全部重建、拦截立刻恢复。
+> 实测：只删 Webhook，约 15 秒内 7 个 validating + 3 个 mutating 全部重建、拦截立刻恢复。
 > 所以**必须两步都做，且顺序不能反**。
 
 ```bash
@@ -793,7 +793,7 @@ kubectl --kubeconfig ./kubeconfig delete validatingwebhookconfiguration,mutating
   -l webhook.kyverno.io/managed-by=kyverno
 ```
 
-实测效果：Webhook 数变为 `0/0` 且不再重建；原本被拦的 Pod 现在**放行**：
+实测效果：`kubectl --kubeconfig ./kubeconfig get validatingwebhookconfiguration,mutatingwebhookconfiguration | grep -ci kyverno` 返回 `0`（不再重建）；原本被拦的 Pod 现在**放行**：
 
 ```text
 $ kubectl --kubeconfig ./kubeconfig -n policy-demo run escape-test --image=nginx:latest --restart=Never --dry-run=server -o yaml
@@ -836,7 +836,7 @@ kubectl --kubeconfig ./kubeconfig get crd | grep -i kyverno || echo "NO_KYVERNO_
 
 # 5) 可选：清理节点上预拉的镜像
 for img in kyverno kyvernopre background-controller cleanup-controller reports-controller readiness-checker; do
-  vagrant ssh k3s-demo-agent-1 -- "sudo k3s ctr images rm reg.kyverno.io/kyverno/$img:v1.19.1"
+  vagrant ssh k3s-demo-agent-1 -c "sudo k3s ctr images rm reg.kyverno.io/kyverno/$img:v1.19.1"
 done
 ```
 
@@ -853,7 +853,7 @@ done
 | **集群 → More Resources → wgpolicyk8s.io → PolicyReports** | `kubectl --kubeconfig ./kubeconfig -n policy-demo get policyreport` | 看合规报告（pass/fail 计数） |
 | **PolicyReport 详情 → YAML** | `kubectl --kubeconfig ./kubeconfig -n policy-demo get policyreport <n> -o yaml` | 逐条查看 `results`（policy/rule/result/message） |
 | **集群 → Workloads（命名空间 `kyverno`）** | `kubectl --kubeconfig ./kubeconfig -n kyverno get deploy,pods` | 看 Kyverno 四个控制器 |
-| **集群 → CRDs** | `kubectl --kubeconfig ./kubeconfig get crd | grep -i kyverno` | 看 Kyverno 注册的 20 个 CRD |
+| **集群 → CRDs** | `kubectl --kubeconfig ./kubeconfig get crd \| grep -i kyverno` | 看 Kyverno 注册的 CRD（名字含 `kyverno` 的 20 个；另有 2 个 `wgpolicyk8s.io` 报告 CRD，合计 22） |
 | **集群 → Events** | `kubectl --kubeconfig ./kubeconfig -n policy-demo get events` | 看 `PolicyViolation` 事件 |
 
 > 提示：Kyverno 的策略和报告都是 **CRD**，所以在 Rancher 里它们落在 **More Resources** 下
@@ -942,7 +942,7 @@ Kyverno chart `3.9.1` / appVersion `v1.19.1`，命名空间 `kyverno`，四个�
 
 **1. 安装前**：无任何 kyverno CRD（`NO_KYVERNO_CRD`），CRD 总数 132。
 
-**2. 安装后**：4 个 Deployment 均 `1/1`；新增 **20 个 Kyverno CRD**；
+**2. 安装后**：4 个 Deployment 均 `1/1`；新增 **22 个 Kyverno CRD**；
 Webhook 配置 7 个 validating + 3 个 mutating；`failurePolicy=Fail`。
 
 **3. 三类策略实测**：
@@ -964,7 +964,7 @@ generate         ：新命名空间 policy-demo-gen 自动获得 default-deny Ne
 
 **本章创建的资源：**
 
-- 命名空间 `kyverno`：4 个控制器 Deployment + 20 个 CRD + Webhook 配置 + 各种 Service；
+- 命名空间 `kyverno`：4 个控制器 Deployment + 22 个 CRD + Webhook 配置 + 各种 Service；
 - `ClusterPolicy`：`require-team-label`、`disallow-latest-tag`、`require-resources`、
   `add-managed-by-label`、`generate-default-networkpolicy`；
 - 命名空间 `policy-demo`：Pod `good` / `good-resources` / `mutated`；

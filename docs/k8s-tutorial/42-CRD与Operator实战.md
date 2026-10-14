@@ -185,7 +185,8 @@ Status  <-  .status.conditions[?(@.type=="Ready")].message
 另外两个常用命令：
 
 ```bash
-kubectl --kubeconfig ./kubeconfig api-resources --api-group=demo.example.com   # 还没建，先看 cert-manager 的
+# demo.example.com 还没注册（要到 §4 才建），现在查是空的
+kubectl --kubeconfig ./kubeconfig api-resources --api-group=demo.example.com
 kubectl --kubeconfig ./kubeconfig api-resources --api-group=cert-manager.io
 ```
 
@@ -348,8 +349,6 @@ status  : readyReplicas / observedGeneration / conditions
 
 文件在 `~/k3s-ops/examples/webapp-operator/config/crd/webapp.yaml`：
 
-`examples/webapp-operator/config/crd/webapp.yaml`：
-
 ```yaml
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -480,7 +479,7 @@ FIELDS:
 **默认值**：不写 `replicas`，用 `--dry-run=server` 看 API Server 补了什么：
 
 ```bash
-kubectl --kubeconfig ./kubeconfig apply --dry-run=server -n default -f - <<'YAML'
+kubectl --kubeconfig ./kubeconfig apply --dry-run=server -n default -f - -o yaml <<'YAML'
 apiVersion: demo.example.com/v1
 kind: WebApp
 metadata:
@@ -522,6 +521,17 @@ The WebApp "dryrun-invalid-test" is invalid: spec.replicas: Invalid value: 99: s
 ```
 
 缺 `image` 同样拒绝：
+
+```bash
+kubectl --kubeconfig ./kubeconfig apply --dry-run=server -n default -f - <<'YAML'
+apiVersion: demo.example.com/v1
+kind: WebApp
+metadata:
+  name: dryrun-noimage-test
+spec:
+  replicas: 2
+YAML
+```
 
 ```text
 The WebApp "dryrun-noimage-test" is invalid: spec.image: Required value
@@ -588,7 +598,11 @@ CRD 解决"类型"，控制器解决"行为"。控制器的核心是一个**调�
 实测无谓写入的证据（间隔 20 秒观察 Deployment 的 `resourceVersion`）：
 
 ```bash
-kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy demo-webapp -o jsonpath='{.metadata.resourceVersion}'
+v1=$(kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy demo-webapp -o jsonpath='{.metadata.resourceVersion}')
+echo "sleep 20 前: $v1"
+sleep 20
+v2=$(kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy demo-webapp -o jsonpath='{.metadata.resourceVersion}')
+echo "sleep 20 后: $v2"
 ```
 
 ```text
@@ -1051,13 +1065,14 @@ docker save -o /tmp/webapp-operator-v0.1.0.tar webapp-operator:v0.1.0
 
 ```bash
 cd ~/k3s-ops
+ls -l /tmp/webapp-operator-v0.1.0.tar
 vagrant upload /tmp/webapp-operator-v0.1.0.tar /tmp/webapp-operator-v0.1.0.tar k3s-demo-agent-1
 vagrant ssh k3s-demo-agent-1 -c "sudo k3s ctr images import /tmp/webapp-operator-v0.1.0.tar"
 vagrant ssh k3s-demo-agent-1 -c "sudo k3s ctr images ls -q | grep webapp-operator"
 ```
 
 ```text
--rw------- 1 liming liming 39825920 10月14日 12:50 /tmp/webapp-operator-v0.1.0.tar
+-rw------- 1 user user 39825920 10月14日 12:50 /tmp/webapp-operator-v0.1.0.tar
 
 Upload has completed successfully!
 
@@ -1488,11 +1503,12 @@ kubectl --kubeconfig ./kubeconfig -n <ns> get events --sort-by=.lastTimestamp
      jsonPath: .spec.port
    ```
    然后 `kubectl apply` 更新 CRD（printer columns 属于 CRD 定义，改动无需重建 CR）。
-4. 控制器启动后日志会出现类似 `cannot list resource "deployments" ... at the cluster scope`
-   （`list` 是 informer 建 cache 必需的），**调谐停止/报错**。这印证第 9.1 节：informer 需要 `list`/`watch`，
-   少任何一项都会失败。
+4. 控制器启动后日志会出现类似这样的报错——
+   `deployments.apps is forbidden: User "system:serviceaccount:operator-demo:webapp-operator" cannot list resource "deployments" in API group "apps" in the namespace "operator-demo"`
+   （注意作用域是**命名空间** `operator-demo`，而不是 `at the cluster scope`——第 9.1 节用的是命名空间级 Role + 命名空间级 cache）。
+   `list` 是 informer 建 cache 必需的，缺了它 cache 建不起来，**调谐停止/报错**。这印证第 9.1 节：informer 需要 `list`/`watch`，少任何一项都会失败。
 5. 删 `Deployment` **不会**删 `WebApp`（没有反向 owner 关系），反而会触发自愈把 Deployment 重建；
-   删 `WebApp` 会**级联**删掉 Deployment（`ownerReference` + GC），但不会删 Pod 之外的东西（Pod 由 Deployment 自己管）。
+   删 `WebApp` 会**级联**删掉 Deployment（`ownerReference` + GC），Pod 再由 Deployment 的 ReplicaSet 间接回收——`WebApp` 本身并不直接持有 Pod。
 6. 无条件 `Update` 会推高 `resourceVersion`、触发更多 watch 事件，可能形成"写→事件→再写"的**热循环**，
    还可能在并发下频繁产生冲突。改进：**读取后比较**，只在关键字段（如 `replicas`/`image`）不一致时才 `Update`（本章的 `drifted()`）。
 7. 例如控制器在云厂商创建了负载均衡器（集群外资源），删除 CR 时需要调用云 API 回收。
@@ -1506,7 +1522,7 @@ kubectl --kubeconfig ./kubeconfig -n <ns> get events --sort-by=.lastTimestamp
 ## 附录：本章真实采集片段与清理
 
 **采集环境**：k3s `v1.30.2+k3s2`，节点 `k3s-demo-server-1`（192.168.56.10）与
-`k3s-demo-agent-1`（192.168.56.20）；集群已有 132 个 CRD（Rancher/cert-manager/Fleet/Gateway API 等）。
+`k3s-demo-agent-1`（192.168.56.20）；集群当时共有 132 个 CRD（含本章注册的 `webapps.demo.example.com`，其余是 Rancher/cert-manager/Fleet/Gateway API 等）。
 `controller-runtime v0.18.4`，Go 静态二进制，镜像 `webapp-operator:v0.1.0`（约 40MB）导入到 agent-1 的 containerd。
 
 **1. CRD 注册**：`webapps.demo.example.com`（group `demo.example.com`，Namespaced，shortName `wa`），

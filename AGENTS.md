@@ -103,7 +103,7 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 ### Kyverno（策略引擎, 教程第 43 章）
 
 - **安装**：`helm install kyverno kyverno/kyverno -n kyverno --create-namespace --set global.nodeSelector."kubernetes\.io/hostname"=k3s-demo-agent-1 --wait --timeout 10m`
-- **组件**：4 个控制器（admission / background / cleanup / reports），各 1 副本，全部钉在 `k3s-demo-agent-1`；新增 20 个 CRD；webhook 7 validating + 3 mutating。
+- **组件**：4 个控制器（admission / background / cleanup / reports），各 1 副本，全部钉在 `k3s-demo-agent-1`；新增 22 个 CRD（`kyverno.io`/`policies.kyverno.io`/`reports.kyverno.io`/`wgpolicyk8s.io`）；webhook 7 validating + 3 mutating。
 - ⚠️ **单点风险**：webhook `failurePolicy=Fail`，控制器又全在唯一 agent 上；agent-1 不可用时，相关命名空间的**写入会被拦**（不是放行）。
 - **逃生（两步，顺序不可反）**：① `kubectl -n kyverno scale deploy --all --replicas=0`；② `kubectl delete validatingwebhookconfiguration,mutatingwebhookconfiguration -l webhook.kyverno.io/managed-by=kyverno`。恢复：`kubectl -n kyverno scale deploy --all --replicas=1`（控制器会自愈重建 webhook）。
 - **演示资源**：命名空间 `policy-demo` / `policy-demo-gen`，5 条 `ClusterPolicy`（详见第 43 章附录）。
