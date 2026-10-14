@@ -56,11 +56,11 @@ Kyverno 不是唯一选择（还有 OPA Gatekeeper / KubeArmor 等），但它�
 所以等下你看到的每个 Pod（`kyverno-admission-controller` 等），
 本质上和第 42 章你手写的 `webapp-operator` **是同一类东西**——只是它管的是"策略"。
 
-> **前瞻提示（重要）**：从 Kyverno 1.14 起，经典的 `kyverno.io/v1` 类型
-> （`ClusterPolicy`/`Policy` 等）已被标记为 **deprecated**，官方推荐迁移到
-> `policies.kyverno.io` 下的 **CEL 版**类型（`ValidatingPolicy` / `MutatingPolicy` /
-> `GeneratingPolicy` / `ImageValidatingPolicy`）。本章**仍用 `ClusterPolicy`**，因为它的
-> `validate/mutate/generate` 语法最直白、最适合讲清三类策略的差别；但你在真实项目里落地新策略时，
+> **前瞻提示（重要）**：Kyverno 从 **1.17** 起把经典的 `kyverno.io/v1` 类型
+> （`ClusterPolicy`/`Policy` 等）标记为即将弃用，**1.19 起正式 deprecated**
+> （官方最后一个完整支持版本），并计划 **1.20 移除**；新建/更新这类对象会收到准入告警。
+> 官方推荐迁移到 `policies.kyverno.io` 下的 **CEL 版**类型（`ValidatingPolicy` /
+> `MutatingPolicy` / `GeneratingPolicy` / `DeletingPolicy` / `ImageValidatingPolicy`，自 v1.18 起 Stable）。本章**仍用 `ClusterPolicy`**，因为它的 `validate/mutate/generate` 语法最直白、最适合讲清三类策略的差别；但你在真实项目里落地新策略时，
 > 应优先考虑 CEL 版。这个"API 会演进、用 CRD 承载的接口可以平滑迁移"的现象，正是第 42 章的主旨。
 
 ---
@@ -658,11 +658,11 @@ spec:
                                # 故意不写 resources
 ```
 
-用官方 CLI 容器跑（挂载整个 `~/kyverno-policies`，`apply` 指向**只含策略的** `policies/` 子目录）：
+用官方 CLI 容器跑（镜像源 `reg.kyverno.io/kyverno/kyverno-cli`，与 `ghcr.io/kyverno/kyverno-cli` 等价；本环境用前者以与 §3.2 的镜像源一致）。挂载整个 `~/kyverno-policies`，`apply` 指向**只含策略的** `policies/` 子目录：
 
 ```bash
 docker run --rm -v ~/kyverno-policies:/p \
-  ghcr.io/kyverno/kyverno-cli:v1.19.1 \
+  reg.kyverno.io/kyverno/kyverno-cli:v1.19.1 \
   apply /p/policies --resource /p/cli-resource.yaml
 ```
 
@@ -694,7 +694,7 @@ pass: 2, fail: 2, warn: 0, error: 0, skip: 0
 # ~/kyverno-policies/policies/*.yaml   ← 只放策略
 # ~/kyverno-policies/cli-resource.yaml ← 测试资源
 docker run --rm -v ~/kyverno-policies:/p \
-  ghcr.io/kyverno/kyverno-cli:v1.19.1 \
+  reg.kyverno.io/kyverno/kyverno-cli:v1.19.1 \
   apply /p/policies --resource /p/cli-resource.yaml
 ```
 
@@ -774,9 +774,17 @@ validate-policy.kyverno.svc failurePolicy=Fail
 
 先确认是谁拦的——错误信息里会写**策略名 + 规则名**。临时放行有三条路：
 
-- **加 `PolicyException`**（推荐，可审计）：显式豁免某个对象，而不是关掉整条策略；
+- **加 `PolicyException`**（推荐，可审计）：显式豁免某个对象，而不是关掉整条策略（⚠️ **默认关闭**，见下）；
 - 把该策略临时改成 `Audit`；
 - 用下面的"逃生"彻底摘掉准入。
+
+> ⚠️ **`PolicyException` 默认关闭**：本章安装 Kyverno 时**没有**开启它（安装输出会提示
+> `PolicyExceptions are disabled by default`）。要用它，须在安装/升级时显式加上
+> `--set features.policyExceptions.enabled=true`（Helm 值 `features.policyExceptions.enabled`）；
+> 否则你创建的 `PolicyException` **不会生效**，只能改用上面两条临时手段。
+> （另注：本章的 `ClusterPolicy` 是 legacy 类型，配套的正是 `kyverno.io/v2` 版
+> `PolicyException`；它同样在 1.19 弃用、1.20 移除，将来会被 CEL 时代的
+> `policies.kyverno.io/v1` 版取代——不过两者 **schema 不同**，并非改个 `apiVersion` 即可。）
 
 ### 10.4 逃生：策略把集群拦死了怎么办（**已实测**）
 
@@ -924,7 +932,7 @@ done
 
    ```bash
    docker run --rm -v "$PWD/policies:/p" -v "$PWD/tests:/t" \
-     ghcr.io/kyverno/kyverno-cli:v1.19.1 \
+     reg.kyverno.io/kyverno/kyverno-cli:v1.19.1 \
      apply /p --resource /t/example.yaml
    # 退出码 0 = 全部合规；非 0 = 有策略未通过或执行错误
    ```
