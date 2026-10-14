@@ -291,7 +291,16 @@ kubectl --kubeconfig ./kubeconfig -n podsec-demo exec $POD -- grep Seccomp /proc
 # Seccomp:	2                                                ← SECCOMP_MODE_FILTER（RuntimeDefault 生效）
 ```
 
-**真实细节：非 root 为什么还能绑 80？** 直觉上绑 <1024 端口需要 `CAP_NET_BIND_SERVICE`，而这里 `CapEff` 明明是 0。原因是 Kubernetes 会把 Pod **网络命名空间内**的 `net.ipv4.ip_unprivileged_port_start` 设为 `0`，于是非特权用户也能绑任意端口：
+**真实细节：非 root 为什么还能绑 80？** 直觉上绑 <1024 端口需要 `CAP_NET_BIND_SERVICE`，而这里 `CapEff` 明明是 0。原因是**容器运行时**在创建 Pod **网络命名空间**时会把它里面的 `net.ipv4.ip_unprivileged_port_start` 置为 `0`——本集群 k3s 自带的 containerd 显式开启了该行为（Kubernetes 自 v1.22 起只是把该 sysctl 标记为"安全 sysctl"，允许但不强制设置）：
+
+```bash
+# 节点上 k3s 生成的 containerd 配置（真实截取）
+vagrant ssh k3s-demo-server-1 -c "sudo grep -i unprivileged /var/lib/rancher/k3s/agent/etc/containerd/config.toml"
+#   enable_unprivileged_ports = true
+#   enable_unprivileged_icmp = true
+```
+
+于是 Pod 内非特权用户也能绑任意端口：
 
 ```bash
 # Pod 内（netns 内）
@@ -414,7 +423,7 @@ kubectl --kubeconfig ./kubeconfig explain pod.spec.containers.securityContext.ap
 2. 只设 `warn`/`audit` 时 Pod **能被创建**，所以"当前跑着"不代表合规。触发条件是**Pod 重建**（滚动更新、节点驱逐、副本扩缩、`kubectl delete pod`）——此时携带违规配置的新 Pod 若命名空间已改为 `enforce`，就会失败。因此灰度应 `audit → warn → enforce`，且在切 `enforce` 前先用 `warn` 覆盖全部待重建路径。
 3. 关键四件套：容器级 `runAsNonRoot`（或 Pod 级）、`capabilities.drop: [ALL]`、`allowPrivilegeEscalation: false`、`readOnlyRootFilesystem: true`，并给 `/var/cache/nginx`、`/var/run`、`/tmp` 挂 `emptyDir`；`securityContext.seccompProfile.type: RuntimeDefault`（Pod 或容器级均可）。
 4. nginx 主进程要写 `pid` 文件（`/var/run/nginx.pid`）、临时缓存（`/var/cache/nginx/*_temp`）。根文件系统只读后这些路径写不了，启动即失败。用 `emptyDir` 把这三个目录挂成可写卷即可，既不破坏"根只读"的安全收益，又满足运行时需要。
-5. Pod netns 内 `ip_unprivileged_port_start = 0`，节点上为 `1024`。Kubernetes 会把 Pod 网络命名空间内的该值设为 0，所以非特权 UID 也能绑 <1024 端口，无需 `CAP_NET_BIND_SERVICE`（因此 `CapEff` 为 0 也能监听 80）。
+5. Pod netns 内 `ip_unprivileged_port_start = 0`，节点上为 `1024`。该值由**容器运行时**在创建 Pod 网络命名空间时置 0（本集群 k3s 自带 containerd 的 `enable_unprivileged_ports = true`；Kubernetes 只将其标记为 safe sysctl，并不强制设置），所以非特权 UID 也能绑 <1024 端口，无需 `CAP_NET_BIND_SERVICE`（因此 `CapEff` 为 0 也能监听 80）。
 6. `Seccomp: 2` 即 `SECCOMP_MODE_FILTER`，表示已加载 seccomp 过滤器（`RuntimeDefault` 生效）；`0` 为 `SECCOMP_MODE_DISABLED`，`1` 为 `SECCOMP_MODE_STRICT`。
 7. PSA 三档只覆盖"已知提权项"这一类，`readOnlyRootFilesystem` 属于**对单个应用的运行时偏好**，没有对应档位；PSP 时代靠 PSP 对象逐条声明，PSA 时代必须**逐 Pod 写进 `securityContext`**，或用策略引擎强制。
 
@@ -461,11 +470,22 @@ $ grep Seccomp /proc/self/status → Seccomp:	2
 ip_unprivileged_port_start = 0
 # 节点上
 net.ipv4.ip_unprivileged_port_start = 1024
+# 该行为的来源（节点上 k3s 生成的 containerd 配置）
+enable_unprivileged_ports = true
+enable_unprivileged_icmp = true
 # seccomp
 actions_avail: kill_process kill_thread trap errno user_notif trace log allow
 # apparmor
 apparmor module is loaded. 41 profiles are in enforce mode.
 容器内 /proc/self/attr/current → cri-containerd.apparmor.d (enforce)
+```
+
+**6. 准入控制器（PSA 内置的证据）：**
+
+```bash
+vagrant ssh k3s-demo-server-1 -c "sudo journalctl -u k3s | grep -i 'admission controller' | tail -1"
+# Loaded 13 validating admission controller(s) successfully in the following order:
+# LimitRanger,ServiceAccount,PodSecurity,Priority,...
 ```
 
 **本章创建的资源：**

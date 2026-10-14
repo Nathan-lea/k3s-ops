@@ -257,7 +257,16 @@ rules:
 - `request`：从网关收到请求到返回响应的**总**预算；
 - `backendRequest`：网关到后端**单次**调用的预算（重试时每次单独计算）。
 
-**失败语义**：若一个规则的所有 `backendRefs` 都无效且规则无 filter，则**所有**匹配流量收到 `503 / UNAVAILABLE`；部分后端无效时，无效者从负载均衡集合中剔除（并触发 `ResolvedRefs=False`）。
+**失败语义**（本集群 CRD 描述原文可查证）：若一个规则的所有 `backendRefs` 都无效且规则无 filter，则**所有**匹配流量收到 **HTTP `500`**（gRPC / `GRPCRoute` 场景对应 `UNAVAILABLE`）。部分后端无效时，**本应发往无效后端的那部分请求按权重比例收到 `500`**（例如两个后端各 50%、其一失效，则约 50% 的请求返回 `500`），同时该路由 `status` 触发 `ResolvedRefs=False`：
+
+```bash
+kubectl --kubeconfig ./kubeconfig explain httproutes.gateway.networking.k8s.io.spec.rules.backendRefs
+# When a HTTPBackendRef is invalid, 500 status codes MUST be returned for
+# requests that would have otherwise been routed to an invalid backend. If
+# multiple backends are specified, and some are invalid, the proportion of
+# requests that would otherwise have been routed to an invalid backend
+# MUST receive a 500 status code.
+```
 
 > ⚠️ 版本细节：本集群安装的 CRD 里 **没有 `retry` 字段**（`kubectl explain httproutes.gateway.networking.k8s.io.spec.rules.retry` 返回 `field "retry" does not exist`）；重试能力随 Gateway API 版本/实现演进，使用前请在**你的**集群用 `kubectl explain` 确认，别照抄网上配置。
 
