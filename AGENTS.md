@@ -11,6 +11,7 @@ k3s 全生命周期管理项目，基于 Vagrant + Ansible + VirtualBox 实现�
 - **K8s 发行版**: k3s（嵌入式 etcd, 多 server HA）
 - **Ingress**: nginx-ingress（替代默认 Traefik）
 - **管理 UI**: Rancher（部署在 k3s 集群上, NodePort 30443）
+- **Gateway API**: NGINX Gateway Fabric（教程第 37 章部署, NodePort 30025）
 - **虚拟化**: VirtualBox >= 7.0
 
 ## 项目结构
@@ -87,6 +88,7 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 |------|------|----------|------|
 | nginx-ingress | HTTP | 30080 | 外部流量入口 |
 | nginx-ingress | HTTPS | 30444 | 外部流量入口（TLS） |
+| NGINX Gateway Fabric | HTTP | 30025 | Gateway API 入口（教程第 37 章部署） |
 | Rancher | HTTPS | 30443 | Rancher UI 管理端 |
 
 ### 当前集群拓扑
@@ -95,7 +97,7 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 - 1 个 agent 节点: k3s-demo-agent-1 (192.168.56.20, 2c/4GB)
 - 数据存储: 嵌入式 etcd（单节点模式）
 - server-2 (192.168.56.11) 已被移除
-- 已部署组件: k3s, nginx-ingress, cert-manager, Rancher
+- 已部署组件: k3s, nginx-ingress, cert-manager, Rancher, Gateway API CRD (v1.4.1), NGINX Gateway Fabric (2.4.2)
 
 ### 关键操作说明
 
