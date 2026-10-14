@@ -80,7 +80,30 @@ kubectl --kubeconfig ./kubeconfig -n operator-demo patch webapp demo-webapp --ty
 kubectl --kubeconfig ./kubeconfig -n operator-demo get webapp demo-webapp -o jsonpath='{.status.readyReplicas}{"\n"}'
 ```
 
-## 5. 重新生成 CRD 与 deepcopy（可选）
+## 5. 设计要点：为什么这里能只用命名空间级 Role
+
+`controller-runtime` 的 informer 默认在**集群级别** `list`/`watch`，哪怕控制器只关心一个命名空间。
+如果只给命名空间级 `Role`，Pod 会处于 `Running`，但日志里会持续刷：
+
+```
+deployments.apps is forbidden: User "system:serviceaccount:operator-demo:webapp-operator"
+cannot list resource "deployments" in API group "apps" at the cluster scope
+```
+
+两种做法二选一：
+
+1. 用 `ClusterRole` + `ClusterRoleBinding`（权限放大到整个集群）；
+2. 把 manager 的缓存限定到命名空间，命名空间级 `Role` 就够用（本示例采用的做法）：
+
+```go
+Cache: cache.Options{
+    DefaultNamespaces: map[string]cache.Config{watchNamespace: {}},
+},
+```
+
+这就是"命名空间级 Operator"的最小权限形态。
+
+## 6. 重新生成 CRD 与 deepcopy（可选）
 
 ```bash
 go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.0
