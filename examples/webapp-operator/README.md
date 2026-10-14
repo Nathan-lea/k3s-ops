@@ -31,7 +31,8 @@ examples/webapp-operator/
 ```bash
 cd ~/k3s-ops/examples/webapp-operator
 go build ./...
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/webapp-operator .
+# -s -w 去掉调试符号，二进制从约 58MB 降到约 40MB
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/webapp-operator .
 ```
 
 ## 2. 打成镜像（宿主机 Docker）
