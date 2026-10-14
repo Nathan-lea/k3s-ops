@@ -501,6 +501,8 @@ spec:
   replicas: 1          # ← 我们没写，API Server 按 schema 的 default 补上了
 ```
 
+（上面为便于阅读，省略了 `kubectl` 自动写入的 `last-applied-configuration` 注解、`uid`、`generation` 与各时间戳；本章其余输出同样只保留讲得清问题的字段。）
+
 **校验**：`replicas` 越界直接拒绝——
 
 ```bash
@@ -1239,7 +1241,7 @@ kubectl --kubeconfig ./kubeconfig apply -f examples/webapp-operator/config/sampl
 
 ```bash
 kubectl --kubeconfig ./kubeconfig -n operator-demo get webapps -o wide
-kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy,po
+kubectl --kubeconfig ./kubeconfig -n operator-demo get deploy,po -o wide
 ```
 
 ```text
