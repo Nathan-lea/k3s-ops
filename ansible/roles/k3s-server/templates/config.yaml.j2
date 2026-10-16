@@ -5,8 +5,12 @@ advertise-address: {{ node_ip }}
 cluster-cidr: {{ k3s_config.cluster_cidr | default('10.42.0.0/16') }}
 service-cidr: {{ k3s_config.service_cidr | default('10.43.0.0/16') }}
 disable:
+{% if k3s_config.disable_traefik %}
   - traefik
+{% endif %}
+{% if k3s_config.disable_servicelb %}
   - servicelb
+{% endif %}
 flannel-backend: vxlan
 kubelet-arg:
   - "allowed-unsafe-sysctls=net.ipv4.ip_forward"
