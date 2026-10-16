@@ -126,6 +126,13 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 - **逃生（两步，顺序不可反）**：① `kubectl -n kyverno scale deploy --all --replicas=0`；② `kubectl delete validatingwebhookconfiguration,mutatingwebhookconfiguration -l webhook.kyverno.io/managed-by=kyverno`。恢复：`kubectl -n kyverno scale deploy --all --replicas=1`（控制器会自愈重建 webhook）。
 - **演示资源**：命名空间 `policy-demo` / `policy-demo-gen`，5 条 `ClusterPolicy`（详见第 43 章附录）。
 
+### Service 暴露与 ServiceLB（教程第 44 章）
+
+- **决策**：k3s 内置 LB（ServiceLB / Klipper）保持**关闭**（`disable_servicelb: true`），对外统一走 **NodePort + nginx-ingress**，避免 `svclb` 与 `30080/30444` 抢端口。
+- **选型**：公司测试（KVM，对齐生产）与生产（混合云）→ 关闭 ServiceLB，用 **MetalLB**（本地/KVM）或**云厂商 LB**（公有云）；三者**不可并存**。
+- ⚠️ **坑 1**：`config.yaml.j2` 的 `disable:` 列表是**硬编码**（`traefik`、`servicelb`），`k3s_config.disable_servicelb` **没有被模板引用**；只改 `nodes.yml` 不生效。要按开关切换需先把模板改成条件渲染（见第 44 章 §8）。
+- ⚠️ **坑 2**：`k3s-ops.sh install` 走 `ansible/inventory.yml`（占位空清单，`hosts (0)`），**匹配不到主机、是空跑**；真正把 `nodes.yml` 下发到节点的是 **Vagrant 的 ansible provisioner**（`vagrant up` / `vagrant provision`）。
+
 ### 关键操作说明
 
 1. **镜像拉取限制**: 部署环境无法直接访问 Docker Hub/GCR/GitHub raw。使用 docker.1panel.live 作为 Docker Hub 镜像。registry.k8s.io 和 quay.io 同样配置了镜像。
