@@ -175,16 +175,9 @@ disable:
 
 ### 8.1 先纠正两个"坑"
 
-**坑 1：`nodes.yml` 的开关没接进模板。** `config.yaml.j2` 里 `disable:` 是**写死的**（`traefik`、`servicelb`），`k3s_config.disable_servicelb` 这个变量**根本没被模板引用**：
+**坑 1：`config.yaml.j2` 的 `disable:` 列表已支持条件渲染（已修复）。** 先前写死 `[traefik, servicelb]`，现在按 `k3s_config.disable_traefik` / `k3s_config.disable_servicelb` 决定是否加入。
 
-```yaml
-# ansible/roles/k3s-server/templates/config.yaml.j2（现状片段）
-disable:
-  - traefik
-  - servicelb
-```
-
-所以只把 `nodes.yml` 改成 `disable_servicelb: false`，**不会改变渲染结果**。
+所以**改 `nodes.yml` 的开关就能生效**（无需先改模板）。
 
 **坑 2：`k3s-ops.sh install` 是空跑。** 它走的是 `ansible/inventory.yml`，而该文件是**占位空清单**：
 
@@ -214,10 +207,9 @@ $ ansible-playbook -i inventory.yml playbooks/k3s-cluster.yml --list-hosts
 
 ### 8.3 方法 B（可重复，纳入配置管理）
 
-1. 让模板尊重变量（改成条件渲染）：
+1. 让模板尊重变量（模板已支持条件渲染，见本仓库 `ansible/roles/k3s-server/templates/config.yaml.j2`）
 
    ```yaml
-   # ansible/roles/k3s-server/templates/config.yaml.j2（改后片段）
    disable:
    {% if k3s_config.disable_traefik %}
      - traefik
@@ -226,8 +218,8 @@ $ ansible-playbook -i inventory.yml playbooks/k3s-cluster.yml --list-hosts
      - servicelb
    {% endif %}
    ```
-
-2. `vagrant/nodes.yml` 里把开关置否：`disable_servicelb: false`。
+   
+   > 注：此仓库的模板**已改为条件渲染**，改 `vagrant/nodes.yml` 的 `disable_servicelb` 即可生效。
 
 3. 重新 provision（provisioner 挂在**最后一个节点**上，会对**所有节点**生效；前提是 Vagrant 状态正常，`vagrant status` 显示 running）：
 
