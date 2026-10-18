@@ -299,11 +299,44 @@ k3s-demo-server-1   Ready                      control-plane,etcd,master   140d 
 
 ### 5.5 恢复集群原状（uncordon + 重建 + 回滚验证）
 
+```yaml
+# ~/k3s-ops/tmp/netpol-client-server.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+  namespace: netpol-demo
+  labels:
+    app: client
+spec:
+  containers:
+    - name: busybox
+      image: busybox:latest
+      command:
+        - /bin/sh
+        - -c
+        - sleep 3600
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server
+  namespace: netpol-demo
+  labels:
+    app: server
+spec:
+  containers:
+    - name: httpd
+      image: docker.1panel.live/library/httpd:2.4-alpine
+      ports:
+        - containerPort: 80
+```
+
 ```bash
 $ kubectl --kubeconfig ./kubeconfig uncordon k3s-demo-agent-1
 node/k3s-demo-agent-1 uncordoned
 
-$ kubectl --kubeconfig ./kubeconfig create -f netpol-client.yaml -f netpol-server.yaml   # 重建裸 Pod
+$ kubectl --kubeconfig ./kubeconfig apply -f ~/k3s-ops/tmp/netpol-client-server.yaml   # 重建裸 Pod
 pod/client created
 pod/server created
 
