@@ -1,0 +1,26 @@
+# ~/k3s-ops/tmp/probe-web.yaml（示例）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: probe-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: nginx:latest
+          ports: [{containerPort: 80}]
+          readinessProbe:
+            httpGet: {path: /, port: 80}
+            initialDelaySeconds: 2
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: {path: /, port: 80}
+            initialDelaySeconds: 10
+            periodSeconds: 5
