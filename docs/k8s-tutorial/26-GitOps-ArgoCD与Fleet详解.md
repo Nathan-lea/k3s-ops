@@ -199,6 +199,7 @@ eb12b2f7f17fdfcb5d201779dbcd7508550409f6  refs/heads/main
 ### 4.2 创建 GitRepo CR（GitOps 的"入伙协议"）
 
 ```yaml
+# ~/k3s-ops/tmp/gitrepo.yaml
 apiVersion: fleet.cattle.io/v1alpha1
 kind: GitRepo
 metadata:
