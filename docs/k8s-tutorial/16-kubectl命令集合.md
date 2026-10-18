@@ -311,7 +311,6 @@ kubectl expose deploy nginx-demo --port=80 --target-port=80 --type=NodePort --na
 本环境 dry-run 真实输出（注意 selector 自动用上 Deployment 的 label）：
 
 ```yaml
-# ~/k3s-ops/tmp/deploy.yaml
 apiVersion: v1
 kind: Service
 metadata:
