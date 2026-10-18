@@ -67,6 +67,7 @@ export KUBECONFIG=./kubeconfig
                                               │ 42 CRD 与 Operator 实战     │
                                               │ 43 Kyverno 策略引擎         │
                                               │ 44 Service 暴露与 LB        │
+                                              │ 45 装前服务器参数设置       │
                                               └─────────────────────────────┘
 ```
 
@@ -119,6 +120,7 @@ export KUBECONFIG=./kubeconfig
 | 42 CRD 与 Operator 实战 | 03/15/31/39 | CRD 结构与 schema/printer columns/status 子资源、声明式与调谐循环、Go + controller-runtime 自写控制器、镜像导入集群、删对象自动重建的自愈验证 |
 | 43 Kyverno 策略引擎 | 24/35/39/42 | PSA 的边界与分层、Kyverno 架构（四控制器 + 20 CRD）、validate/mutate/generate 三类策略实测、PolicyReport 合规报告、Kyverno CLI 离线测试、failurePolicy 与逃生/卸载 |
 | 44 Service 暴露与 LoadBalancer | 04/21/37 | Service 三形态对比、k3s ServiceLB 机制与默认状态、开与不开实测对比、本环境/公司测试/生产选型、MetalLB 与 VIP、本环境开启与回滚步骤 |
+| 45 集群安装前服务器参数设置 | 00/10 | 硬性 vs 建议参数分组、swap/内核模块/sysctl/limits/NTP/防火墙端口逐项“四要素”（参数名·值·作用·设置位置）、k3s-common 角色对照、一键设置与体检脚本（幂等 / --check / 退出码巡检） |
 
 ---
 
@@ -190,3 +192,4 @@ export KUBECONFIG=./kubeconfig
 | [42 CRD 与 Operator 实战](42-CRD与Operator实战.md) | CRD 拆解（schema/printer columns/status 子资源）、调谐循环与幂等、Go+controller-runtime 自写小控制器、镜像导入、删对象自愈 |
 | [43 Kyverno 策略引擎](43-Kyverno策略引擎.md) | validate/mutate/generate 三类策略、Enforce 拦截与 Audit 报告、PolicyReport、Kyverno CLI 离线测试、PSA 分层、failurePolicy 逃生与卸载 |
 | [44 Service 暴露与 LoadBalancer](44-Service暴露与LoadBalancer.md) | 三种暴露方式、k3s ServiceLB 机制与开关、开与不开对比、本环境/公司测试/生产选型、MetalLB 与真 VIP、本环境开启与回滚 |
+| [45 集群安装前服务器参数设置](45-集群安装前服务器参数设置.md) | 装前 OS 参数（swap/内核模块/sysctl/limits/NTP/防火墙）、硬性 vs 建议、k3s-common 对照、一键设置与体检脚本 |
