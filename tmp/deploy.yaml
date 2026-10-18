@@ -1,0 +1,14 @@
+# ~/k3s-ops/tmp/deploy.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-svc
+  namespace: lab
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx-demo          # ★ 自动匹配
+  type: NodePort
