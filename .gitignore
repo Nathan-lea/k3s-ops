@@ -22,3 +22,6 @@ Thumbs.db
 # 本地中间备份文档（不入库）
 docs/manual-deployment-1.md
 docs/manual-deployment-2.md
+
+# 教程实验用本地清单（内容内联在对应章节文档里，文件由读者按文档创建）
+/tmp/

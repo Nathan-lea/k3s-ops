@@ -80,7 +80,59 @@ kubectl --kubeconfig ./kubeconfig get storageclass
 # local-path (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   141d
 ```
 
-创建命名空间并部署 `web-headless`（Headless Service）+ `web`（3 副本 StatefulSet）：
+创建命名空间并部署 `web-headless`（Headless Service）+ `web`（3 副本 StatefulSet），完整清单如下：
+
+```yaml
+# ~/k3s-ops/tmp/ch40-sts.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-headless
+  namespace: sts-demo
+  labels:
+    app: web
+spec:
+  clusterIP: None
+  ports:
+    - port: 80
+      name: http
+  selector:
+    app: web
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+  namespace: sts-demo
+spec:
+  serviceName: web-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: www
+              mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+    - metadata:
+        name: www
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 100Mi
+```
 
 ```bash
 kubectl --kubeconfig ./kubeconfig create ns sts-demo
@@ -234,7 +286,53 @@ web-2   1/1     Running   web-8695b9fdb6        ← 只更新了 web-2
 
 ## 8. 真实实测五：删除 StatefulSet 不回收 PVC（常见坑）
 
-用一个一次性的小 StatefulSet 验证：删掉 StatefulSet 后，PVC **依然存在**（`Bound`）：
+用一个一次性的小 StatefulSet 验证（只挂一块 50Mi 的盘，与前面的 `web` 互不相干）：
+
+```yaml
+# ~/k3s-ops/tmp/ch40-tmp-sts.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tmp
+  namespace: sts-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tmp
+  template:
+    metadata:
+      labels:
+        app: tmp
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 50Mi
+```
+
+```bash
+kubectl --kubeconfig ./kubeconfig apply -f ~/k3s-ops/tmp/ch40-tmp-sts.yaml
+# 等 Pod 起来即可（local-path 是 WaitForFirstConsumer：Pod 调度成功 = 卷已 Bound）
+kubectl --kubeconfig ./kubeconfig -n sts-demo get pod tmp-0
+# NAME     READY   STATUS    RESTARTS   AGE
+# tmp-0    1/1     Running   0          12s     ← AGE 为样例，实际不同
+```
+
+删掉 StatefulSet 后，PVC **依然存在**（`Bound`）：
 
 ```bash
 kubectl --kubeconfig ./kubeconfig -n sts-demo delete sts tmp

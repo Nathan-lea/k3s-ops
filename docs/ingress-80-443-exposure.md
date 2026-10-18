@@ -233,7 +233,7 @@ curl -k -I -H "Host: example.local" https://192.168.56.10/
 本项目里常见是 `addons/ingress/values.yaml`。结构因版本略有不同。先大致看一下：
 
 ```bash
-cat /data/Materials/k3s-ops/addons/ingress/values.yaml 2>&1 | head -40
+cat ~/k3s-ops/addons/ingress/values.yaml 2>&1 | head -40
 ```
 
 ### 步骤 2：在 values 里加 hostNetwork 配置
@@ -267,7 +267,7 @@ ingress-nginx:
 # 假设用 helm upgrade --install
 helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -n ingress-nginx --create-namespace \
-  -f /data/Materials/k3s-ops/addons/ingress/values.yaml
+  -f ~/k3s-ops/addons/ingress/values.yaml
 ```
 
 > 具体命令以项目脚本（如 `k3s-ops.sh deploy-ingress`）为准更保险。若项目已有 `k3s-ops.sh deploy-ingress`，直接跑它也会应用最新 values。
