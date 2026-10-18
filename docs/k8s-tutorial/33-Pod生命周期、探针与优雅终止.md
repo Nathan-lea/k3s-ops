@@ -113,7 +113,7 @@ spec:
 $ kubectl --kubeconfig ./kubeconfig create ns probe-demo
 namespace/probe-demo created
 
-$ kubectl --kubeconfig ./kubeconfig apply -f /tmp/probe-demo.yaml
+$ kubectl --kubeconfig ./kubeconfig apply -f ~/k3s-ops/tmp/probe-web.yaml
 deployment.apps/web created
 
 $ kubectl --kubeconfig ./kubeconfig -n probe-demo rollout status deploy/web --timeout=60s
