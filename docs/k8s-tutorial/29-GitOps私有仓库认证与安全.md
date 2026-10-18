@@ -140,6 +140,12 @@ curl -u admin:<PAT> -X POST http://localhost:3000/api/v1/user/repos \
 ### 3.2 不带认证的 GitRepo（真实输出）
 
 ```yaml
+# 不带认证的 GitRepo（名字与下方输出一致）
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: private-noauth
+  namespace: fleet-local
 spec:
   repo: http://10.0.2.2:3000/admin/fleet-private.git
   branch: main
@@ -167,6 +173,12 @@ kubectl -n fleet-local create secret generic git-basic-auth \
 ```
 
 ```yaml
+# 加上 clientSecretName 引用后（名字与下方输出一致）
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: private-auth
+  namespace: fleet-local
 spec:
   repo: http://10.0.2.2:3000/admin/fleet-private.git
   branch: main

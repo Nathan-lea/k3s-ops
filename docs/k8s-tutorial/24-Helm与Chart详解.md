@@ -191,6 +191,17 @@ helm template nginx-demo ./nginx-demo --set replicaCount=5   # 把最终 YAML �
 
 **优先级**（从高到低）：`--set` > 后写的 `-f` > 先写的 `-f` > values.yaml 默认值
 
+两份覆盖文件的内容都极简（只写要覆盖的键）：
+
+```yaml
+# ~/k3s-ops/tmp/base.yaml（示例）
+# replicaCount: 4
+---
+# ~/k3s-ops/tmp/prod.yaml（示例）
+# replicaCount: 6
+# image: { repository: nginx, tag: "1.27" }
+```
+
 ```bash
 helm upgrade nginx-demo ./nginx-demo -n demo-helm \
   -f base.yaml -f prod.yaml --set replicaCount=5
