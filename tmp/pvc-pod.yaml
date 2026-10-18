@@ -1,0 +1,21 @@
+# ~/k3s-ops/tmp/pvc-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-writer
+  namespace: lab
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k3s-demo-server-1
+  containers:
+    - name: writer
+      image: nginx:latest
+      imagePullPolicy: IfNotPresent
+      command: ["/bin/sh", "-c", "echo 'hello pvc' > /data/test.txt && sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: nginx-data
