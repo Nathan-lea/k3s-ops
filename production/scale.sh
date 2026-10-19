@@ -18,7 +18,6 @@ set -euo pipefail
 
 PROD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROD_DIR="${PROD_SCRIPT_DIR}"
-REPO_DIR="$(cd "${PROD_DIR}/.." && pwd)"
 
 # shellcheck source=lib/config.sh
 . "${PROD_DIR}/lib/config.sh"
@@ -215,8 +214,8 @@ cmd_upgrade() {
   inventory_generate_quiet
 
   log_mark "升级 k3s 到 ${version}（serial=${serial}）"
-  # 复用父角色的 upgrade：下载新二进制 → 重启服务 → 等 node Ready
-  run_playbook "${REPO_DIR}/ansible/playbooks/k3s-upgrade.yml" \
+  # 60-upgrade：下载新二进制 → 重启服务 → 等 node Ready
+  run_playbook "${PLAYBOOK_DIR}/60-upgrade.yml" \
     -e "k3s_upgrade_version=${version}" \
     --serial "${serial}"
 
@@ -231,8 +230,8 @@ cmd_backup() {
   inventory_generate_quiet
 
   log_mark "在第一个 server 上创建 etcd snapshot"
-  # 复用父仓库的 backup playbook（只在 server 组上跑）
-  run_playbook "${REPO_DIR}/ansible/playbooks/k3s-backup.yml" \
+  # 70-backup 只在 server 组上跑（--limit 限定到首个 server）
+  run_playbook "${PLAYBOOK_DIR}/70-backup.yml" \
     --limit "$(ipam_first_server_host)"
 
   log_mark "备份完成"

@@ -2,7 +2,7 @@
 # =============================================================================
 # production/scripts/kubeconfig.sh —— 生成 production/kubeconfig（server 指向真实 IP）
 # =============================================================================
-# bootstrap.sh 拉取父角色 init.yml 里 fetch 下来的 kubeconfig 时，server 字段是
+# 05/20 阶段角色 init.yml 里 fetch 下来的 kubeconfig 时，server 字段是
 # 127.0.0.1（只在首个 server 节点内部可用）。这个脚本把它改成首个 server 的真实 IP，
 # 写到 production/kubeconfig，方便控制机直接 kubectl。
 #

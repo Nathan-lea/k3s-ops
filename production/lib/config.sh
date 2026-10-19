@@ -5,7 +5,7 @@
 # 用法: source production/lib/config.sh
 #
 # 提供:
-#   PROD_DIR / REPO_DIR / ROLES_DIR / ANSIBLE_DIR / INVENTORY_DIR / STATE_DIR
+#   PROD_DIR / ROLES_DIR / ANSIBLE_DIR / INVENTORY_DIR / STATE_DIR
 #   CHARTS_DIR / ARTIFACTS_DIR / LOG_DIR / LOG_FILE
 #   prod_validate_config   — 校验主配置的取值与互斥关系（失败即退出）
 #   prod_bool <value>      — true/1/yes/on → 0，其余 → 1
@@ -22,10 +22,9 @@
 
 PROD_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROD_DIR="$(cd "${PROD_LIB_DIR}/.." && pwd)"
-REPO_DIR="$(cd "${PROD_DIR}/.." && pwd)"
 
-ROLES_DIR="${REPO_DIR}/ansible/roles"
-PARENT_LIB="${REPO_DIR}/lib"
+# production/ 是自包含目录：roles 与日志库都在自己树内，可整体拷走
+ROLES_DIR="${PROD_DIR}/ansible/roles"
 ANSIBLE_DIR="${PROD_DIR}/ansible"
 INVENTORY_DIR="${ANSIBLE_DIR}/inventory"
 PLAYBOOK_DIR="${ANSIBLE_DIR}/playbooks"
@@ -208,11 +207,11 @@ fi
 # k3s 解析后的版本（preflight 阶段由 prod_resolve_k3s_version 填写）
 : "${K3S_RESOLVED_VERSION:=}"
 
-# 日志库（父仓库共享实现）。它会强制 LOG_FILE=${LOG_DIR}/k3s-ops.log，
+# 日志库（自带实现，自包含所需）。它会强制 LOG_FILE=${LOG_DIR}/k3s-ops.log，
 # 所以这里先把我们要的文件名存下来，加载完再改回去（LOG_DIR 它用 `:-` 不会覆盖）。
 _PROD_LOG_FILE="${LOG_FILE}"
-# shellcheck source=../../lib/logging.sh
-. "${PARENT_LIB}/logging.sh"
+# shellcheck source=logging.sh
+. "${PROD_LIB_DIR}/logging.sh"
 LOG_FILE="${_PROD_LOG_FILE}"
 unset _PROD_LOG_FILE
 
@@ -363,12 +362,12 @@ prod_validate_config() {
     _fail "${msg}（K3S_INSTALL_MODE=offline）"
   fi
 
-  # 父仓库必须可达（production/ 不是可单独拷贝的目录）
+  # 自带 roles / 日志库必须齐全（缺失说明拷贝不完整）
   if [ ! -d "${ROLES_DIR}/k3s-common" ]; then
-    _fail "找不到父仓库 roles: ${ROLES_DIR}/k3s-common（production/ 必须放在 k3s-ops 仓库内）"
+    _fail "找不到自带 roles: ${ROLES_DIR}/k3s-common（production/ 拷贝不完整）"
   fi
-  if [ ! -f "${PARENT_LIB}/logging.sh" ]; then
-    _fail "找不到父仓库日志库: ${PARENT_LIB}/logging.sh"
+  if [ ! -f "${PROD_LIB_DIR}/logging.sh" ]; then
+    _fail "找不到自带日志库: ${PROD_LIB_DIR}/logging.sh（production/ 拷贝不完整）"
   fi
 
   return "${rc}"

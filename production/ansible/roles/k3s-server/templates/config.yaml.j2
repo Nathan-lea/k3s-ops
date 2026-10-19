@@ -1,0 +1,33 @@
+# {{ ansible_managed }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ node_ip }}
+advertise-address: {{ node_ip }}
+cluster-cidr: {{ k3s_config.cluster_cidr | default('10.42.0.0/16') }}
+service-cidr: {{ k3s_config.service_cidr | default('10.43.0.0/16') }}
+disable:
+{% if k3s_config.disable_traefik %}
+  - traefik
+{% endif %}
+{% if k3s_config.disable_servicelb %}
+  - servicelb
+{% endif %}
+{% if k3s_config.disable_local_storage | default(false) %}
+  # 关掉内置的 local-path-provisioner：它写死 /var/lib/rancher/k3s/storage，
+  # 且 k3s 启动时会反复 apply 该清单，手工配置会被静默回滚。
+  # 自管 localdisk StorageClass 时必须为 true（见 production/addons/localdisk/）。
+  - local-storage
+{% endif %}
+flannel-backend: {{ k3s_config.flannel_backend | default('vxlan') }}
+kubelet-arg:
+  - "allowed-unsafe-sysctls=net.ipv4.ip_forward"
+etcd-expose-metrics: true
+{% if k3s_config.taint_server is defined and not k3s_config.taint_server %}
+node-taint: []
+{% endif %}
+{% if first_server_ip is defined and node_ip == first_server_ip %}
+cluster-init: true
+{% endif %}
+{% if first_server_ip is defined and node_ip != first_server_ip %}
+server: https://{{ first_server_ip }}:6443
+token: {{ k3s_token | default('') }}
+{% endif %}

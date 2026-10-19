@@ -16,12 +16,7 @@
 
 生产/测试环境的特点：**没有 VIP、没有负载均衡、Nginx-Ingress 用 `hostNetwork` 直接占 80/443**，所以任何节点 IP 都能直接访问服务。
 
-**依赖关系**：`production/` 不是可单独拷贝的目录，它复用了父仓库的：
-
-- `ansible/roles/k3s-common` / `k3s-server` / `k3s-agent` / `k3s-manage`
-- `lib/logging.sh`
-
-请把它放在 k3s-ops 仓库内一起分发。
+**自包含**：`production/` 可整体拷贝独立运行——roles（`ansible/roles/`）、日志库（`lib/logging.sh`）、addons 模板（`addons/`）都在本目录内，不依赖 k3s-ops 仓库的其他部分。
 
 ---
 
@@ -118,8 +113,8 @@ SSH_PORT=2222 INIT_SSH_USER=root INIT_SSH_PASSWORD=xxx ./production/bootstrap.sh
 |---|---|---|
 | `apply` | `ssh-setup.sh` + `05` + `10` + `20` + `30` | 扩容：新节点走一遍同一条流水线（已存在节点上都是幂等的），最后全量重跑 addons 以套用新增的节点 label |
 | `remove` | `ansible/playbooks/50-scale-remove.yml` | 缩容：drain → delete node → 停服务 → 清数据 → 清 etcd member |
-| `upgrade` | `ansible/playbooks/k3s-upgrade.yml`（父仓库） | 升级 k3s 二进制，逐节点重启 |
-| `backup` | `ansible/playbooks/k3s-backup.yml`（父仓库） | 在第一个 server 上做 etcd snapshot |
+| `upgrade` | `ansible/playbooks/60-upgrade.yml` | 升级 k3s 二进制，逐节点重启 |
+| `backup` | `ansible/playbooks/70-backup.yml` | 在第一个 server 上做 etcd snapshot |
 
 ---
 
@@ -304,7 +299,7 @@ vim production/config/cluster.env
 
 ## 镜像加速 / 内网仓库
 
-默认用父仓库已验证过的镜像加速列表（见 `production/config/registries.yaml.example`）。要换成内网 Artifactory：
+默认用一份已验证过的镜像加速列表（见 `production/config/registries.yaml.example`）。要换成内网 Artifactory：
 
 ```bash
 # cluster.env 或 cluster.env.local

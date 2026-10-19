@@ -1,0 +1,31 @@
+---
+- name: Backup etcd snapshot
+  hosts: server
+  gather_facts: true
+  serial: 1
+  order: sorted
+
+  tasks:
+    - name: Ensure snapshot directory exists
+      file:
+        path: "{{ k3s_etcd_snapshot_dir }}"
+        state: directory
+        mode: '0700'
+      run_once: true
+
+    - name: Create etcd snapshot
+      command: >
+        k3s etcd-snapshot save
+        --snapshot-dir={{ k3s_etcd_snapshot_dir }}
+      register: snapshot_result
+      changed_when: snapshot_result.rc == 0
+
+    - name: List recent snapshots
+      command: ls -lh {{ k3s_etcd_snapshot_dir }}
+      register: snapshot_list
+      changed_when: false
+
+    - name: Display snapshots
+      debug:
+        var: snapshot_list.stdout_lines
+      run_once: true

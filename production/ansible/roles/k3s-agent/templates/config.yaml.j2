@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+node-name: {{ inventory_hostname }}
+node-ip: {{ node_ip }}
+server: https://{{ first_server_ip }}:6443
+token: {{ k3s_token }}

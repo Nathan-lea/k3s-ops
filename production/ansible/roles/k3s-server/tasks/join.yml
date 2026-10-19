@@ -1,0 +1,35 @@
+---
+- name: Get node token from first server
+  slurp:
+    src: "{{ k3s_token_file }}"
+  register: token_slurp
+  delegate_to: "{{ first_server_host }}"
+
+- name: Set k3s_token fact
+  set_fact:
+    k3s_token: "{{ token_slurp.content | b64decode | trim }}"
+
+- name: Regenerate config with token
+  template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_dir }}/config.yaml"
+    mode: '0644'
+
+- name: Create systemd service for k3s-server (joining)
+  template:
+    src: k3s.service.j2
+    dest: /etc/systemd/system/k3s.service
+    mode: '0644'
+
+- name: Enable and start k3s service
+  systemd:
+    name: k3s
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for k3s to join cluster
+  wait_for:
+    port: 6443
+    delay: 10
+    timeout: 120

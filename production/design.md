@@ -3,6 +3,8 @@
 - 日期：2026-10-19
 - 状态：待确认（批准后才进入 writing-plans）
 - 位置：`k3s-ops/production/`
+- 改版记录：2026-10-19 独立化——`production/` 自带 roles/日志库/addons/playbooks，可整体拷走；
+  主项目改动收敛为 1 处（P4 privacy-check 白名单）。此前的父仓库依赖设计见 git 历史。
 
 ---
 
@@ -87,18 +89,22 @@
 
 | 资产 | 复用方式 | 说明 |
 |---|---|---|
-| `ansible/roles/k3s-common` | 直接复用 | 内含 swap/内核模块/sysctl/registries.yaml/ufw 逻辑；按开关使用 |
-| `ansible/roles/k3s-server` | 直接复用 | init / join / config 模板 |
-| `ansible/roles/k3s-agent` | 直接复用 | join |
-| `ansible/roles/k3s-manage` | 直接复用 | `remove-node` 用于缩容 |
-| `lib/logging.sh` | 复用（覆盖 `LOG_DIR`/`LOG_FILE`） | 生产侧日志落 `production/logs/` |
+| `ansible/roles/k3s-common` | **自带副本**（拷入 `production/ansible/roles/`） | 内含 swap/内核模块/sysctl/registries.yaml/ufw 逻辑；按开关使用 |
+| `ansible/roles/k3s-server` | **自带副本** | init / join / config 模板；fetch kubeconfig 到 `production/kubeconfig` |
+| `ansible/roles/k3s-agent` | **自带副本** | join |
+| `ansible/roles/k3s-manage` | **自带副本** | `remove-node` / `upgrade` 用于缩容与升级 |
+| `lib/logging.sh` | **自带副本**（拷入 `production/lib/`，覆盖 `LOG_DIR`/`LOG_FILE`） | 生产侧日志落 `production/logs/` |
 | `scripts/privacy-check.sh` | 复用 | 需同步维护 `ALLOW_*` 白名单 |
 | `docs/ingress-80-443-exposure.md` | 作为 hostNetwork 方案依据 | 本文取其"DaemonSet + hostNetwork + ClusterIP/无 Service"结论 |
 
-**耦合声明**：`production/` **必须位于 k3s-ops 仓库内**，通过相对路径 `../ansible/roles`、`../lib/` 引用父仓库。
-它不是一个可单独拷走的目录。理由：用户明确要求复用现有 roles。preflight 会校验父仓库路径存在。
+**自包含声明**：`production/` **可整体拷贝独立运行**——4 个 roles 与 `lib/logging.sh` 已作为副本拷入
+本目录（`ansible/roles/`、`lib/logging.sh`），playbook/脚本引用全部走本目录内路径。
+（早期设计为引用父仓库 `../ansible/roles`、`../lib/`；2026-10-19 按用户要求改为物理独立，
+主项目不需要知道 `production/` 的存在。）preflight 校验自带 roles 齐全。
 
-**需要改动的父仓库文件（4 处，全部向后兼容、默认行为不变）**：
+**父仓库改动（最终只剩 1 处）**：早期方案要改父仓库 4 处（P1–P4）；独立化后 P1/P2/P3（及后续 P5/P6）
+的改动**直接落在 `production/ansible/roles/` 的自带副本里**，父仓库侧已全部还原。
+唯一保留在父仓库的是 P4——pre-push 钩子扫的是整个仓库，白名单只能加在钩子侧：
 
 | # | 文件 | 改动 | 为什么不能在生产侧绕开 |
 |---|---|---|---|
@@ -107,8 +113,8 @@
 | P3 | `ansible/roles/k3s-common/tasks/main.yml` | `include_tasks: firewall.yml` 加 `when: use_ufw \| default(true)` | `k3s-server`/`k3s-agent` 角色**内部**会 `include_role: k3s-common`，生产侧无法阻止 ufw 任务被执行 |
 | P4 | `scripts/privacy-check.sh` | 规则 8 增加**精确文件名**豁免：`production/config/cluster.env`、`production/config/cluster.env.local.example`；`ALLOW_IPS` 增加示例网段 `192.168.100.0/.1/.11/.12/.13` 等 | 该脚本按 `*.env`/`*.env.*` 判敏感文件，而 `cluster.env` 这个文件名是用户指定的（约束 14）；规则 6 会把示例内网 IP 一律判为泄漏 |
 
-P3、P4 的理由值得说明：这两处**不是**为了生产功能，而是"复用现有代码"与"不改现有行为"之间的必然摩擦点。
-四处改动的默认值都与现状一致，现有 Vagrant 流程不受影响。
+P1/P2/P3/P5/P6 的落点现在是 `production/ansible/roles/` 里的自带副本（flannel 参数化、disable local-storage、
+`use_ufw` 门控、registries auth、离线跳过 `get_url`），随 `production/` 一起拷走，无跨目录耦合。
 
 ---
 
@@ -126,18 +132,22 @@ production/
 │   └── registries.yaml.example   # 内部仓库/离线镜像配置示例
 ├── lib/
 │   ├── config.sh                 # 读 cluster.env + .local + IPAM，导出全局变量
+│   ├── logging.sh                # 自带日志库（自包含所需，不再引用主项目 lib/）
 │   ├── ipam.sh                   # 解析 ipam.yml（hostname/ip/role/first server/校验）
 │   └── inventory.sh              # 由 ipam 生成 Ansible inventory 与 extra_vars（唯一写入点）
 ├── ansible/
 │   ├── ansible.cfg               # inventory/roles_path/ssh 默认值
 │   ├── inventory/                # 生成物（gitignore）：hosts.yml、extra_vars.yml
+│   ├── roles/                    # 自带副本：k3s-common / k3s-server / k3s-agent / k3s-manage
 │   ├── playbooks/
 │   │   ├── 05-preflight.yml      # 节点可达性、基础包、目录
 │   │   ├── 10-os-init.yml        # 服务器初始化（复用 k3s-common + 时区/chrony/limits/hosts/localdisk 目录）
 │   │   ├── 20-k3s-cluster.yml    # 复用 roles：server init/join + agent join + 取 kubeconfig
 │   │   ├── 30-addons.yml         # helm / localdisk / ingress / cert-manager / NFS / Rancher
 │   │   ├── 40-scale-add.yml      # 新节点：os-init + join
-│   │   └── 50-scale-remove.yml   # 缩容：drain + 删除节点
+│   │   ├── 50-scale-remove.yml   # 缩容：drain + 删除节点
+│   │   ├── 60-upgrade.yml        # 升级 k3s 二进制（serial: 1）
+│   │   └── 70-backup.yml         # etcd snapshot（首个 server）
 │   └── files/
 │       ├── chrony.conf.j2
 │       ├── limits-k8s.conf
@@ -289,7 +299,7 @@ RANCHER_TLS_SOURCE=rancher              # rancher | cert-manager（默认自签�
 CHARTS_MODE=local                       # local=用 production/charts/*.tgz；repo=用 Helm 仓库
 ARTIFACTS_DIR=${PROD_DIR}/artifacts
 K3S_DOWNLOAD_URL=                       # 留空则用官方 GitHub；离线/内网填镜像
-REGISTRY_MIRRORS=                       # 留空则沿用父仓库默认加速；Artifactory 时填内网地址
+REGISTRY_MIRRORS=                       # 留空则用自带默认加速列表；Artifactory 时填内网地址
 REGISTRY_ENDPOINT=                      # 例 artifactory.example.com
 REGISTRY_USERNAME=                      # 建议放 .local 或环境变量
 REGISTRY_PASSWORD=
@@ -317,7 +327,7 @@ all:
 `ansible/inventory/extra_vars.yml`：`cluster_name`、`k3s_version`、`first_server_ip`、`first_server_host`、
 `k3s_config`（含 `disable_traefik`/`disable_servicelb`/`taint_server`/`cluster_cidr`/`service_cidr`/`flannel_backend`）、
 `k3s_*` 路径变量、`containerd_mirrors`、`prod_dir`。
-> 说明：这些键与 `ansible/group_vars/all.yml` 同名同义；因为使用独立 inventory，父仓库的 group_vars 不会自动加载，
+> 说明：这些键与主项目 `ansible/group_vars/all.yml` 同名同义；因为使用独立 inventory，那边的 group_vars 不会自动加载，
 > 由生成器显式写入（含默认值）。生成器是**唯一写入点**，避免双份真相。
 
 ---
@@ -331,7 +341,7 @@ bootstrap.sh [--ssh-only|--os-only|--skip-os|--addons-only] [--yes] [--root-pass
 | 步骤 | 动作 | 失败策略 |
 |---|---|---|
 | 0 | `lib/config.sh` 读配置；`lib/ipam.sh` 校验 IPAM（≥1 server、唯一性、首 server 为 init） | 立即退出 |
-| 1 | `05-preflight.yml`：校验父仓库路径、依赖命令（`ansible`/`python3`/`ssh`、需要时 `sshpass`）、SSH 端口可达、目标机是否已有集群、**helm 来源可用性**（在线可下载 / 离线 `artifacts/helm` 存在）、`LOCALDISK_DEFAULT_SC` 与 `NFS_DEFAULT_SC` 互斥 | 立即退出 |
+| 1 | `05-preflight.yml`：校验自带 roles 完整性、依赖命令（`ansible`/`python3`/`ssh`、需要时 `sshpass`）、SSH 端口可达、目标机是否已有集群、**helm 来源可用性**（在线可下载 / 离线 `artifacts/helm` 存在）、`LOCALDISK_DEFAULT_SC` 与 `NFS_DEFAULT_SC` 互斥 | 立即退出 |
 | 2 | `scripts/ssh-setup.sh`：root+密码 → 建 `ops`/sudoers/密钥 → **验证 `ops`+密钥登录成功** → 按开关加固 root | 验证失败则**不改** `sshd_config`，退出 |
 | 3 | `10-os-init.yml`（以 `ops` + 密钥，`become: true`）：主机名、chrony+时区、关 swap、内核模块/sysctl、limits、ufw（可选）、创建 `LOCALDISK_PATH`、`/etc/hosts` 写入集群节点、基础包 | 立即退出 |
 | 4 | `20-k3s-cluster.yml`（`serial: 1`）：第一个 server `cluster-init: true` → 其余 server etcd join → agent join → 拉 kubeconfig | `any_errors_fatal` |
@@ -383,18 +393,17 @@ bootstrap.sh [--ssh-only|--os-only|--skip-os|--addons-only] [--yes] [--root-pass
 | 内核模块/sysctl | 复用 `k3s-common` | `overlay`/`br_netfilter` + 3 个 sysctl 键 |
 | registries.yaml | 复用 `k3s-common`（`containerd.yml`） | 由 `containerd_mirrors` 生成；Artifactory 时由生成器写出 `configs.<endpoint>.auth` |
 | limits | 生产 playbook | `/etc/security/limits.d/99-k8s.conf`（`nofile`/`nproc`），`ENABLE_LIMITS=true` 时 |
-| ufw | 复用 `k3s-common` **条件化** | 按 `USE_UFW` 决定是否 include `firewall.yml`；`UFW_ALLOW_CIDR` 放行内网，k3s 端口用现有清单 |
+| ufw | 自带 `k3s-common` 副本**条件化** | 按 `USE_UFW` 决定是否 include `firewall.yml`；`UFW_ALLOW_CIDR` 放行内网，k3s 端口用现有清单 |
 | localdisk 目录 | 生产 playbook | `LOCALDISK_ENABLED=true` 时，每个节点创建 `LOCALDISK_PATH`，`0777`（provisioner 的 helper pod 需可写） |
 | 基础包 | 生产 playbook | 复用 `k3s-common/vars` 的 `packages` 列表并安装（含 `nfs-common`） |
-| ufw/防火墙 | 见 §12 与 P3 | `USE_UFW` 关时父角色也不再写 ufw 规则（父角色 P3 改动） |
+| ufw/防火墙 | 见 §12 | `USE_UFW` 关时 role 副本也不写 ufw 规则（副本带 `use_ufw` 门控） |
 
-`10-os-init.yml` **直接复用 `k3s-common` 角色**（`roles: [k3s-common]`），拿到 swap / 内核模块 / sysctl /
-`registries.yaml` / 防火墙（受 `use_ufw` 门控，见 P3）全部能力；随后在同一 playbook 里追加
-主机名、`/etc/hosts`、时区 + chrony、limits、基础包、`LOCALDISK_PATH` 目录这些父角色没有的项。
+`10-os-init.yml` **直接复用自带的 `k3s-common` 副本**（`roles: [k3s-common]`），拿到 swap / 内核模块 / sysctl /
+`registries.yaml` / 防火墙（受 `use_ufw` 门控）全部能力；随后在同一 playbook 里追加
+主机名、`/etc/hosts`、时区 + chrony、limits、基础包、`LOCALDISK_PATH` 目录这些 role 没有的项。
 
-> 权衡说明：父角色 `main.yml` 原本**无条件** include `firewall.yml`，`USE_UFW=false` 就失效。
-> 与其在生产侧绕开父角色、把 swap/内核/sysctl 抄一遍（会有两处需要同步维护的真相），
-> 不如加 P3 那一行 `when: use_ufw | default(true)`——默认值不动，现有行为完全不变，且生产侧保持"整段复用"。
+> 权衡说明：role 副本的 `main.yml` 对 `firewall.yml` 的 include 带 `when: use_ufw | default(true)` 门控，
+> `USE_UFW=false` 整段跳过；swap/内核/sysctl 不在生产侧抄第二份（避免两处需要同步维护的真相）。
 
 ufw 说明（约束 15）：`USE_UFW=false` 时**整段跳过**，不安装也不改 ufw；`true` 时放行
 `6443/10250/8472/2379/2380` + `SSH_PORT` + `UFW_ALLOW_CIDR` 内的常用端口（80/443 必须放行，因为 ingress 用宿主机端口）。
@@ -432,7 +441,7 @@ ufw 说明（约束 15）：`USE_UFW=false` 时**整段跳过**，不安装也�
    `K3S_INSTALL_MODE=offline` 或 `HELM_BIN` 已给路径时用本地 artifact，
    否则从 `HELM_DOWNLOAD_URL`（留空=官方 `get.helm.sh`）下载 `HELM_VERSION` 的
    `linux-amd64` tarball 解到 `/usr/local/bin`。装完 `helm version` 校验。
-   > 父仓库把 helm 当**控制端**工具（`~/.local/bin/helm`），k3s 的 `install.yml` 只装 `k3s`/`kubectl`。
+   > 角色副本沿用主项目约定：helm 是**控制端**工具，`install.yml` 只装 `k3s`/`kubectl`。
    > 目标是"一条命令"，所以 helm 由 bootstrap 自己解决，而不是要求用户预装。
 1. **localdisk（本地盘）**：**停用 k3s 内置 local-storage**（`k3s_config.disable_local_storage=true`），
    改为**自管清单** `addons/localdisk/manifests.yaml.tpl`（SA + RBAC + ConfigMap + Deployment + StorageClass）：
@@ -518,7 +527,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
   由 `scripts/offline-load.sh` 分发；`artifacts/images/*.tar` 用 `k3s ctr images import` 导入每个节点。
 - `CHARTS_MODE=local`：`charts/*.tgz`，只需 **3 个** chart：
   `ingress-nginx-4.11.0.tgz`、`cert-manager-v1.20.2.tgz`、`rancher-2.15.2.tgz`。
-  ⚠️ 父仓库 `.gitignore` 里已有 `*.tgz`（"体积大，不入库"），所以 chart 包**不会随 git 走**：
+  ⚠️ 根 `.gitignore` 与 `production/.gitignore` 都排除 `*.tgz`（"体积大，不入库"），所以 chart 包**不会随 git 走**：
   交付时用 `scripts/fetch-artifacts.sh` 在有网的机器上把它们拉到 `production/charts/`。
   `CHARTS_MODE=repo`：`helm repo add` + `update`（需要网络或内网 ChartMuseum/Artifactory）。
 - **不需要 chart 的组件**：`localdisk` 与 NFS provisioner 走自管清单（见 §12 第 1、4 项），
@@ -570,9 +579,9 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 
 | # | 决定 | 理由 |
 |---|---|---|
-| D1 | `production/` 依赖父仓库（`../ansible/roles`、`../lib/`），不可单拷 | 用户要求复用现有 roles |
-| D2 | 父仓库只做 4 处**向后兼容**改动（P1–P4，见 §5），默认行为不变 | CNI 可配置、localdisk 可配路径、ufw 可关、`cluster.env` 文件名是硬需求；四处都绕不过去 |
-| D3 | 自写薄 playbook，不复用父仓库的 playbook（roles 复用） | 父 playbook 写死 kubeconfig 输出路径与 Vagrant 假设 |
+| D1 | `production/` **物理独立**：roles/日志库/addons/playbooks 全在本目录，可整体拷走（2026-10-19 修订；早期为引用父仓库 `../ansible/roles`、`../lib/`） | 用户要求"两者物理上不要有任何连接，production 干净到可以当独立项目读" |
+| D2 | 父仓库只留 1 处改动（P4 privacy-check 白名单，见 §5）；P1/P2/P3/P5/P6 落在自带 role 副本里 | 白名单只能在钩子侧；功能改动随副本拷走，无跨目录耦合 |
+| D3 | 自写薄 playbook，不复用主项目 playbook（roles 用自带副本） | 主项目 playbook 写死 kubeconfig 输出路径与 Vagrant 假设 |
 | D4 | addons 用 `helm` CLI 在首个 server 上跑，不用 `kubernetes.core` | 少依赖，节点网络更可能通内网仓库 |
 | D5 | StorageClass 名用 `localdisk`（自管清单），不用内置 `local-path` | 内置 local-path 的路径只能靠打 ConfigMap 补丁，实测会被 k3s 启动时按 `manifests/local-storage.yaml` 还原 |
 | D6 | Rancher 走 Ingress + cert-manager 内网证书，不用 NodePort | 约束 4「不保留 NodePort」+ 问答 23 |
@@ -607,18 +616,27 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 
 方案是"想"，这一节是"做"。以下条目与前文冲突时，以本节为准。
 
-### 18.1 父仓库改动：从 4 处扩到 6 处（修正 D2）
+### 18.1 父仓库改动收敛为 1 处（P4）；P1/P2/P3/P5/P6 落入自带 role 副本
+
+`production/` 独立化后（2026-10-19），原先对父仓库 roles 的 5 处改动（P1/P2/P3/P5/P6）**直接改在
+`production/ansible/roles/` 的自带副本里**，主项目的 `ansible/roles/` 已还原为原始状态。
+父仓库唯一保留的改动是 P4：
 
 | # | 文件 | 改动 | 为什么绕不过 |
 |---|---|---|---|
-| P1 | `ansible/roles/k3s-server/templates/config.yaml.j2` | `flannel-backend` 参数化（`k3s_config.flannel_backend \| default('vxlan')`） | 约束 11：CNI 默认 Flannel、可配 |
-| P2 | 同上 | `disable:` 列表按 `k3s_config.disable_local_storage` 追加 `local-storage` | D5/A2：自管 localdisk 时必须关掉内置的，否则两个 provisioner 抢同一个 PV 名 |
-| P3 | `ansible/roles/k3s-common/tasks/main.yml` | `firewall.yml` 外面套 `when: use_ufw \| default(true)` | 约束 15：`USE_UFW=false` 必须真的不碰防火墙；`default(true)` 保住老用法 |
 | P4 | `scripts/privacy-check.sh` | 精确文件名豁免 `production/config/cluster.env{,.local.example}`、`production/scripts/kubeconfig.sh`；`ALLOW_IPS` 加 `192.168.100.*`；`ALLOW_PASS_VALUES` 加 `ChangeMe`；`ALLOW_PATH_PATTERNS` 加 `/data/k8s-local-path` | 否则 pre-push 钩子拦住本项目自己的文件（D12） |
-| P5 | `ansible/roles/k3s-common/templates/registries.yaml.j2` | 渲染可选 `configs.<host>.auth`（来源 `containerd_registry_credentials`，默认 `auth: {}`） | 约束 9：Artifactory 私有仓库需要 basic auth，否则 k3s 拉镜像 401 |
-| P6 | `ansible/roles/{k3s-server,k3s-agent}/tasks/install.yml` | `get_url` 套 `when: not (k3s_skip_download \| default(false))` | 约束 9：离线部署时二进制由 `offline-load.sh` 预置，不能再让 `get_url` 去联网 |
 
-P5/P6 的变量都带 `default()`，父仓库老 playbook 行为不变。
+自带 role 副本里带的 5 处能力（原 P1/P2/P3/P5/P6，随 `production/` 拷走）：
+
+| # | 副本内文件 | 改动 | 依据 |
+|---|---|---|---|
+| P1 | `roles/k3s-server/templates/config.yaml.j2` | `flannel-backend` 参数化（`k3s_config.flannel_backend \| default('vxlan')`） | 约束 11：CNI 默认 Flannel、可配 |
+| P2 | 同上 | `disable:` 列表按 `k3s_config.disable_local_storage` 追加 `local-storage` | D5/A2：自管 localdisk 时必须关掉内置的，否则两个 provisioner 抢同一个 PV 名 |
+| P3 | `roles/k3s-common/tasks/main.yml` | `firewall.yml` 外面套 `when: use_ufw \| default(true)` | 约束 15：`USE_UFW=false` 必须真的不碰防火墙 |
+| P5 | `roles/k3s-common/templates/registries.yaml.j2` | 渲染可选 `configs.<host>.auth`（来源 `containerd_registry_credentials`，默认 `auth: {}`） | 约束 9：Artifactory 私有仓库需要 basic auth，否则 k3s 拉镜像 401 |
+| P6 | `roles/{k3s-server,k3s-agent}/tasks/install.yml` | `get_url` 套 `when: not (k3s_skip_download \| default(false))` | 约束 9：离线部署时二进制由 `offline-load.sh` 预置，不能再让 `get_url` 去联网 |
+
+所有变量都带 `default()`；副本与主项目角色从此各自演化，互不影响。
 
 ### 18.2 `hosts:` 不做模板展开 → inventory 里落真实 group
 

@@ -1,0 +1,13 @@
+---
+- name: Ensure containerd config directory exists
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: '0755'
+
+- name: Generate containerd registry mirrors config
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    mode: '0644'
+  when: containerd_mirrors is defined

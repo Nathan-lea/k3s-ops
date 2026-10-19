@@ -17,7 +17,8 @@
 #   kubeconfig.sh         生成 production/kubeconfig（server 指向首个 server 的 IP）
 #   verify.sh             落地后自检
 #
-# 说明: production/ 依赖父仓库的 ansible/roles/* 与 lib/*，不能单独拷贝走。
+# 说明: production/ 自包含（roles / 日志库 / addons / playbooks 都在本目录内），
+#       可整体拷贝到任意位置独立运行。
 # =============================================================================
 set -euo pipefail
 

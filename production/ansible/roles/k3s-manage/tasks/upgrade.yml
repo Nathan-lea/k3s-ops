@@ -1,0 +1,18 @@
+---
+- name: Download new k3s binary
+  get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_upgrade_version }}/k3s"
+    dest: "{{ k3s_server_bin }}"
+    mode: '0755'
+    timeout: 120
+
+- name: Restart k3s service
+  systemd:
+    name: "{{ 'k3s' if node_role == 'server' else 'k3s-agent' }}"
+    state: restarted
+    daemon_reload: true
+
+- name: Wait for node to be ready
+  command: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=120s
+  delegate_to: "{{ first_server_host }}"
+  changed_when: false

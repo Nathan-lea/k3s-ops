@@ -1,0 +1,4 @@
+---
+- name: Include management tasks based on action
+  include_tasks: "{{ k3s_action }}.yml"
+  when: k3s_action is defined
