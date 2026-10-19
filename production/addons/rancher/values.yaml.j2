@@ -1,0 +1,45 @@
+# {{ ansible_managed }}
+# =============================================================================
+# Rancher —— 集群管理 UI
+# =============================================================================
+# 访问方式: https://任意节点IP/   （ingress-nginx 用 hostNetwork 直接占 80/443）
+#   Host 头必须是 {{ prod.rancher.hostname }}（Ingress 按 host 路由）
+#   例: curl -k -H "Host: {{ prod.rancher.hostname }}" https://<节点IP>/
+#   或在客户机 hosts 里写: <节点IP> {{ prod.rancher.hostname }}
+#
+# 证书来源 tls.source={{ prod.rancher.tls_source }}:
+#   rancher   = Rancher 借集群里的 cert-manager 自签一套 CA 并签发（内网默认）
+#   letsEncrypt / secret（自签名）见 Rancher 官方文档
+# 注意: rancher chart 里没有 cert-manager 子 chart，CRD 缺失时证书签不出来，
+#       所以 30-addons.yml 里 cert-manager 一定排在 rancher 前面。
+# =============================================================================
+hostname: {{ prod.rancher.hostname }}
+replicas: {{ prod.rancher.replicas }}
+# 首次登录要求的 bootstrap 密码（对应 config/cluster.env 的 RANCHER_BOOTSTRAP_PASSWORD）
+bootstrapPassword: "{{ prod.rancher.bootstrap_password }}"
+
+networkExposure:
+  type: ingress
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  # 生成 nginx-ingress 的标准注解（超时/协议等）
+  includeDefaultExtraAnnotations: true
+  extraAnnotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+  tls:
+    source: {{ prod.rancher.tls_source }}
+    secretName: tls-rancher-ingress
+
+# 告诉 chart 集群里已有的 cert-manager 版本（chart 只用它做版本校验与提示）
+certmanager:
+  version: "{{ prod.rancher.certmanager_version }}"
+
+# true = 用 rancher 镜像里自带的 system charts，不去网上拉（受限网络/内网必须为 true）
+useBundledSystemChart: true
+
+priorityClassName: rancher-critical

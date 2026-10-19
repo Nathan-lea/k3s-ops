@@ -1,0 +1,147 @@
+# {{ ansible_managed }}
+# =============================================================================
+# nfs-provisioner —— nfs-subdir-external-provisioner（清单方式）
+# =============================================================================
+# 为什么自管清单: 上游 chart 只通过 GitHub Releases 分发 .tgz，本环境拉不到；
+# 而它本质就是 RBAC + 一个 Deployment + 一个 StorageClass，用清单更可控。
+#
+# NFS 服务器: {{ nfs_server }}
+#   - IN_CLUSTER_NFS=false → 外部 NFS（config/cluster.env 的 NFS_SERVER）
+#   - IN_CLUSTER_NFS=true  → 集群内 NFS Server 的 Service DNS 名
+#
+# 卷目录: <NFS_PATH>/<namespace>-<pvc-name>-<pv-name>
+# 回收策略: {{ prod.nfs.reclaim_policy }}（archiveOnDelete={{ prod.nfs.archive_on_delete }}）
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ prod.nfs.namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nfs-client-provisioner
+  namespace: {{ prod.nfs.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-client-provisioner-runner
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims/status"]
+    verbs: ["update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["create", "delete", "get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: run-nfs-client-provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nfs-client-provisioner-runner
+subjects:
+  - kind: ServiceAccount
+    name: nfs-client-provisioner
+    namespace: {{ prod.nfs.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: leader-locking-nfs-client-provisioner
+  namespace: {{ prod.nfs.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: leader-locking-nfs-client-provisioner
+  namespace: {{ prod.nfs.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: leader-locking-nfs-client-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: nfs-client-provisioner
+    namespace: {{ prod.nfs.namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-client-provisioner
+  namespace: {{ prod.nfs.namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-client-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccountName: nfs-client-provisioner
+      containers:
+        - name: nfs-client-provisioner
+          image: "{{ prod.nfs.image }}"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: k8s-sigs.io/nfs-subdir-external-provisioner
+            - name: NFS_SERVER
+              value: "{{ nfs_server }}"
+            - name: NFS_PATH
+              value: "{{ prod.nfs.path }}"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: "{{ nfs_server }}"
+            path: "{{ prod.nfs.path }}"
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ prod.nfs.sc_name }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "{{ 'true' if prod.nfs.is_default else 'false' }}"
+provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
+parameters:
+  archiveOnDelete: "{{ 'true' if prod.nfs.archive_on_delete else 'false' }}"
+reclaimPolicy: {{ prod.nfs.reclaim_policy }}
+volumeBindingMode: Immediate
+# 强制 NFS 协议版本；缺了这条会走客户端默认（可能是 v3，取决于内核与挂载协商）
+mountOptions:
+  - nfsvers={{ prod.nfs.version }}

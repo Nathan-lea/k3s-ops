@@ -1,0 +1,346 @@
+---
+# =============================================================================
+# 30-addons.yml —— 附加组件（在第一个 server 上跑 helm/kubectl）
+# =============================================================================
+# 顺序有依赖，别调换:
+#   localdisk → ingress → cert-manager → (in-cluster NFS) → nfs-provisioner → rancher
+#   - ingress 先装好，Rancher 的 Ingress 才有 class=nginx 可用
+#   - cert-manager 必须在 rancher 之前（rancher chart 依赖它的 CRD 才能签发证书）
+#   - nfs-provisioner 依赖 in-cluster NFS 的 Service（如果开了 IN_CLUSTER_NFS）
+#
+# 幂等: 全部用 kubectl apply / helm upgrade --install，重复执行不产生漂移。
+# 本 playbook 也是 scale.sh apply 的最后一步（顺带把新节点的标签补上）。
+# =============================================================================
+- name: 集群附加组件
+  hosts: first_server
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  vars:
+    prod_addon_dir: /etc/k3s-ops/addons
+    prod_chart_stage: /etc/k3s-ops/charts
+    prod_kubeconfig: /etc/rancher/k3s/k3s.yaml
+    prod_helm_bin: "{{ prod.helm.bin or '/usr/local/bin/helm' }}"
+    prod_charts_mode: "{{ prod.charts_mode }}"
+
+    # local 模式用本地 .tgz（先 copy 到节点），repo 模式用 Helm 仓库里的名字
+    ingress_chart_ref: "{{ (prod_chart_stage ~ '/ingress-nginx-' ~ prod.ingress.chart_version ~ '.tgz') if prod_charts_mode == 'local' else 'ingress-nginx/ingress-nginx' }}"
+    certmanager_chart_ref: "{{ (prod_chart_stage ~ '/cert-manager-' ~ prod.certmanager.chart_version ~ '.tgz') if prod_charts_mode == 'local' else 'jetstack/cert-manager' }}"
+    rancher_chart_ref: "{{ (prod_chart_stage ~ '/rancher-' ~ prod.rancher.chart_version ~ '.tgz') if prod_charts_mode == 'local' else 'rancher-stable/rancher' }}"
+
+    # 仓库模式下 helm 需要 --version 钉版本；本地 .tgz 自带版本，不能再传 --version
+    ingress_ver_arg: "{{ ('--version ' ~ prod.ingress.chart_version) if prod_charts_mode == 'repo' else '' }}"
+    certmanager_ver_arg: "{{ ('--version ' ~ prod.certmanager.chart_version ~ ' --set installCRDs=true') if prod_charts_mode == 'repo' else '' }}"
+    rancher_ver_arg: "{{ ('--version ' ~ prod.rancher.chart_version) if prod_charts_mode == 'repo' else '' }}"
+
+    # IN_CLUSTER_NFS=true 时，NFS 服务器名换成集群内 Service
+    prod_nfs_server: "{{ ('nfs-server.' ~ prod.nfs.in_cluster_namespace ~ '.svc.cluster.local') if prod.nfs.in_cluster else prod.nfs.server }}"
+
+  environment:
+    KUBECONFIG: "{{ prod_kubeconfig }}"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # 0. 目录与 helm
+    # -------------------------------------------------------------------------
+    - name: 创建远端工作目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0700'
+      loop:
+        - /etc/k3s-ops
+        - "{{ prod_addon_dir }}"
+        - "{{ prod_chart_stage }}"
+
+    - name: 分发 helm 安装脚本
+      copy:
+        src: "{{ playbook_dir }}/../files/helm-setup.sh"
+        dest: /etc/k3s-ops/helm-setup.sh
+        mode: '0700'
+
+    - name: 安装 / 校验 helm（幂等）
+      command: /etc/k3s-ops/helm-setup.sh
+      args:
+        chdir: /etc/k3s-ops
+      environment:
+        KUBECONFIG: "{{ prod_kubeconfig }}"
+        HELM_VERSION: "{{ prod.helm.version }}"
+        HELM_BIN: "{{ prod_helm_bin }}"
+        HELM_DOWNLOAD_URL: "{{ prod.helm.download_url }}"
+        HELM_ARTIFACT: "{{ prod.artifacts_dir }}/helm"
+      register: prod_helm_setup
+      changed_when: "'已安装' in prod_helm_setup.stdout"
+
+    - name: 确认 helm 可用
+      command: "{{ prod_helm_bin }} version --short"
+      register: prod_helm_version
+      changed_when: false
+
+    - name: helm 版本
+      debug:
+        msg: "{{ prod_helm_version.stdout }}"
+
+    # -------------------------------------------------------------------------
+    # 1. chart 分发（CHARTS_MODE=local）
+    # -------------------------------------------------------------------------
+    - name: 分发离线 chart —— ingress-nginx
+      copy:
+        src: "{{ prod.charts_dir }}/ingress-nginx-{{ prod.ingress.chart_version }}.tgz"
+        dest: "{{ prod_chart_stage }}/ingress-nginx-{{ prod.ingress.chart_version }}.tgz"
+        mode: '0600'
+      when:
+        - prod_charts_mode == 'local'
+        - prod.ingress.enabled | bool
+
+    - name: 分发离线 chart —— cert-manager
+      copy:
+        src: "{{ prod.charts_dir }}/cert-manager-{{ prod.certmanager.chart_version }}.tgz"
+        dest: "{{ prod_chart_stage }}/cert-manager-{{ prod.certmanager.chart_version }}.tgz"
+        mode: '0600'
+      when:
+        - prod_charts_mode == 'local'
+        - prod.certmanager.enabled | bool
+
+    - name: 分发离线 chart —— rancher
+      copy:
+        src: "{{ prod.charts_dir }}/rancher-{{ prod.rancher.chart_version }}.tgz"
+        dest: "{{ prod_chart_stage }}/rancher-{{ prod.rancher.chart_version }}.tgz"
+        mode: '0600'
+      when:
+        - prod_charts_mode == 'local'
+        - prod.rancher.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 2. Helm 仓库（CHARTS_MODE=repo）
+    # -------------------------------------------------------------------------
+    - name: 添加 Helm 仓库
+      command: "{{ prod_helm_bin }} repo add {{ item.name }} {{ item.url }} --force-update"
+      loop:
+        - { name: ingress-nginx, url: "https://kubernetes.github.io/ingress-nginx" }
+        - { name: jetstack, url: "https://charts.jetstack.io" }
+        - { name: rancher-stable, url: "https://releases.rancher.com/server-charts/stable" }
+      when: prod_charts_mode == 'repo'
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # 3. localdisk（自管清单）
+    # -------------------------------------------------------------------------
+    - name: 渲染 localdisk 清单
+      template:
+        src: "{{ playbook_dir }}/../../addons/localdisk/manifests.yaml.j2"
+        dest: "{{ prod_addon_dir }}/localdisk.yaml"
+        mode: '0600'
+      when: prod.localdisk.enabled | bool
+
+    - name: 应用 localdisk 清单
+      command: kubectl apply -f {{ prod_addon_dir }}/localdisk.yaml
+      register: prod_localdisk_apply
+      changed_when: "'created' in prod_localdisk_apply.stdout or 'configured' in prod_localdisk_apply.stdout"
+      when: prod.localdisk.enabled | bool
+
+    - name: 等待 localdisk provisioner 就绪
+      command: kubectl -n {{ prod.localdisk.namespace }} rollout status deploy/local-path-provisioner --timeout=120s
+      changed_when: false
+      when: prod.localdisk.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 4. ingress-nginx
+    # -------------------------------------------------------------------------
+    - name: 渲染 ingress 取值
+      template:
+        src: "{{ playbook_dir }}/../../addons/nginx-ingress/values.yaml.j2"
+        dest: "{{ prod_addon_dir }}/ingress-values.yaml"
+        mode: '0600'
+      when: prod.ingress.enabled | bool
+
+    - name: 安装 ingress-nginx
+      command: >-
+        {{ prod_helm_bin }} upgrade --install {{ prod.ingress.release }} {{ ingress_chart_ref }}
+        --namespace {{ prod.ingress.namespace }} --create-namespace
+        -f {{ prod_addon_dir }}/ingress-values.yaml
+        {{ ingress_ver_arg }}
+        --wait --timeout 10m
+      register: prod_ingress_install
+      when: prod.ingress.enabled | bool
+
+    - name: ingress 安装结果
+      debug:
+        msg: "{{ prod_ingress_install.stdout_lines | default([]) }}"
+      when: prod.ingress.enabled | bool
+
+    # 80/443 直接由 ingress 占用，装完立刻验证一次
+    - name: 检查 ingress 是否已占用节点 80/443
+      shell: |
+        ss -tlnH | awk '{print $4}' | grep -E ':{{ prod.ingress.http_port }}$' >/dev/null && echo http-ok || echo http-missing
+        ss -tlnH | awk '{print $4}' | grep -E ':{{ prod.ingress.https_port }}$' >/dev/null && echo https-ok || echo https-missing
+      register: prod_port_check
+      changed_when: false
+      when: prod.ingress.enabled | bool
+
+    - name: ingress 端口校验
+      assert:
+        that:
+          - "'http-ok' in prod_port_check.stdout"
+          - "'https-ok' in prod_port_check.stdout"
+        fail_msg: >-
+          {{ inventory_hostname }} 上 80/443 未按预期被 ingress 监听（{{ prod_port_check.stdout_lines | join(' / ') }}）。
+          排查: kubectl -n {{ prod.ingress.namespace }} get pod -o wide；确认 hostNetwork 生效、容器端口未被其他进程占用。
+      when: prod.ingress.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 5. cert-manager
+    # -------------------------------------------------------------------------
+    - name: 渲染 cert-manager 取值
+      template:
+        src: "{{ playbook_dir }}/../../addons/cert-manager/values.yaml.j2"
+        dest: "{{ prod_addon_dir }}/certmanager-values.yaml"
+        mode: '0600'
+      when: prod.certmanager.enabled | bool
+
+    - name: 安装 cert-manager
+      command: >-
+        {{ prod_helm_bin }} upgrade --install {{ prod.certmanager.release }} {{ certmanager_chart_ref }}
+        --namespace {{ prod.certmanager.namespace }} --create-namespace
+        -f {{ prod_addon_dir }}/certmanager-values.yaml
+        {{ certmanager_ver_arg }}
+        --wait --timeout 10m
+      register: prod_certmanager_install
+      when: prod.certmanager.enabled | bool
+
+    - name: 渲染内网 CA 签发链
+      template:
+        src: "{{ playbook_dir }}/../../addons/cert-manager/issuers.yaml.j2"
+        dest: "{{ prod_addon_dir }}/certmanager-issuers.yaml"
+        mode: '0600'
+      when: prod.certmanager.enabled | bool
+
+    - name: 应用内网 CA 签发链
+      command: kubectl apply -f {{ prod_addon_dir }}/certmanager-issuers.yaml
+      register: prod_issuers_apply
+      changed_when: "'created' in prod_issuers_apply.stdout or 'configured' in prod_issuers_apply.stdout"
+      when: prod.certmanager.enabled | bool
+
+    - name: 等待内部 CA 密钥生成
+      command: kubectl -n {{ prod.certmanager.namespace }} get secret k3s-ops-ca
+      register: prod_ca_secret
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: prod_ca_secret.rc == 0
+      when: prod.certmanager.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 6. NFS（可选）
+    # -------------------------------------------------------------------------
+    - name: 渲染集群内 NFS Server 清单
+      template:
+        src: "{{ playbook_dir }}/../../addons/in-cluster-nfs/manifests.yaml.j2"
+        dest: "{{ prod_addon_dir }}/in-cluster-nfs.yaml"
+        mode: '0600'
+      when:
+        - prod.nfs.enabled | bool
+        - prod.nfs.in_cluster | bool
+
+    - name: 部署集群内 NFS Server（⚠️ 未真机验证，见文件头说明）
+      command: kubectl apply -f {{ prod_addon_dir }}/in-cluster-nfs.yaml
+      register: prod_icnfs_apply
+      changed_when: "'created' in prod_icnfs_apply.stdout or 'configured' in prod_icnfs_apply.stdout"
+      when:
+        - prod.nfs.enabled | bool
+        - prod.nfs.in_cluster | bool
+
+    - name: 渲染 nfs-provisioner 清单
+      template:
+        src: "{{ playbook_dir }}/../../addons/nfs-provisioner/manifests.yaml.j2"
+        dest: "{{ prod_addon_dir }}/nfs-provisioner.yaml"
+        mode: '0600'
+      when: prod.nfs.enabled | bool
+
+    - name: 应用 nfs-provisioner 清单
+      command: kubectl apply -f {{ prod_addon_dir }}/nfs-provisioner.yaml
+      register: prod_nfs_apply
+      changed_when: "'created' in prod_nfs_apply.stdout or 'configured' in prod_nfs_apply.stdout"
+      when: prod.nfs.enabled | bool
+
+    - name: 等待 nfs-provisioner 就绪
+      command: kubectl -n {{ prod.nfs.namespace }} rollout status deploy/nfs-client-provisioner --timeout=180s
+      changed_when: false
+      when: prod.nfs.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 7. Rancher
+    # -------------------------------------------------------------------------
+    - name: 渲染 Rancher 取值
+      template:
+        src: "{{ playbook_dir }}/../../addons/rancher/values.yaml.j2"
+        dest: "{{ prod_addon_dir }}/rancher-values.yaml"
+        mode: '0600'
+      when: prod.rancher.enabled | bool
+
+    - name: 安装 Rancher
+      command: >-
+        {{ prod_helm_bin }} upgrade --install {{ prod.rancher.release }} {{ rancher_chart_ref }}
+        --namespace {{ prod.rancher.namespace }} --create-namespace
+        -f {{ prod_addon_dir }}/rancher-values.yaml
+        {{ rancher_ver_arg }}
+        --wait --timeout 15m
+      register: prod_rancher_install
+      when: prod.rancher.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # 8. 节点标签（IPAM 里声明的，幂等覆盖）
+    # -------------------------------------------------------------------------
+    - name: 应用 IPAM 里定义的节点标签
+      command: "kubectl label node {{ item }} --overwrite"
+      loop: "{{ prod_node_labels }}"
+      changed_when: false
+      when: prod_node_labels | length > 0
+
+    # -------------------------------------------------------------------------
+    # 9. 汇总
+    # -------------------------------------------------------------------------
+    - name: 采集 StorageClass
+      command: kubectl get storageclass
+      register: prod_sc
+      changed_when: false
+
+    - name: 采集 IngressClass
+      command: kubectl get ingressclass
+      register: prod_ic
+      changed_when: false
+
+    - name: 附加组件汇总
+      debug:
+        msg:
+          - "StorageClass:"
+          - "{{ prod_sc.stdout_lines }}"
+          - "IngressClass:"
+          - "{{ prod_ic.stdout_lines }}"
+          - "Rancher: {{ 'https://' ~ prod.rancher.hostname ~ '/ （Host 头必须为 ' ~ prod.rancher.hostname ~ '）' if prod.rancher.enabled else '未启用' }}"
+
+- name: 附加组件结果验证
+  hosts: first_server
+  gather_facts: false
+  become: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+  tasks:
+    - name: 检查各组件工作负载
+      command: "kubectl -n {{ item.ns }} get {{ item.kind }} {{ item.name }} --no-headers"
+      register: prod_workload
+      changed_when: false
+      failed_when: false
+      loop:
+        - { ns: "{{ prod.localdisk.namespace }}", kind: deploy, name: local-path-provisioner }
+        - { ns: "{{ prod.ingress.namespace }}", kind: ds, name: "{{ prod.ingress.release }}-controller" }
+        - { ns: "{{ prod.certmanager.namespace }}", kind: deploy, name: "{{ prod.certmanager.release }}" }
+        - { ns: "{{ prod.certmanager.namespace }}", kind: deploy, name: "{{ prod.certmanager.release }}-webhook" }
+        - { ns: "{{ prod.nfs.namespace }}", kind: deploy, name: nfs-client-provisioner }
+        - { ns: "{{ prod.rancher.namespace }}", kind: deploy, name: "{{ prod.rancher.release }}" }
+
+    - name: 打印工作负载状态
+      debug:
+        msg: "{{ prod_workload.results | map(attribute='stdout') | select | list }}"

@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# =============================================================================
+# cert-manager —— 集群级证书签发（内网 CA / 自签）
+# =============================================================================
+# 两个用途：
+#   1) 给业务 Ingress 发证书：用 addons/cert-manager/issuers.yaml.j2 里的
+#      ClusterIssuer `k3s-ops-ca`（内部 CA），签发前把 issuerRef 指向它即可
+#   2) Rancher 自己也要用（chart 里没有 cert-manager 子 chart，CRD 缺失会签不出证书）
+# =============================================================================
+# CRD 必须由本 chart 安装（否则要先手工 kubectl apply 一大堆 CRD）
+crds:
+  enabled: true
+  keep: true
+
+# 小集群：各组件 1 副本即可；高可用场景再调大
+replicaCount: 1
+webhook:
+  replicaCount: 1
+cainjector:
+  replicaCount: 1
+startupapicheck:
+  enabled: true
+
+# 不装 ServiceMonitor（集群没有 Prometheus Operator，装了只会留下一个没用的 CR）
+prometheus:
+  enabled: false

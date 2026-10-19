@@ -1,0 +1,22 @@
+---
+# =============================================================================
+# 40-scale-add.yml —— 扩容：把新节点拉进集群
+# =============================================================================
+# 扩容本质就是"对新节点跑一遍安装流程"，所以这里直接复用 bootstrap 的两个 playbook：
+#   10-os-init.yml   —— 系统初始化（k3s-common + 时区/chrony/limits/ufw/本地盘目录）
+#   20-k3s-cluster.yml —— 装 k3s，server 走 etcd join，agent 走 token 加入
+#
+# 用法（由 scale.sh apply 调用，也可手动）:
+#   ansible-playbook production/ansible/playbooks/40-scale-add.yml \
+#     -i production/ansible/inventory/hosts.yml \
+#     -e @production/ansible/inventory/extra_vars.yml \
+#     -l <新节点主机名>
+#
+# 注意: 一定要用 -l 限制到新节点。不加 -l 虽然也是幂等的，但会在所有节点上重跑一遍
+# 系统初始化（apt/chrony/ufw），没必要。
+#
+# 附加组件（ingress/Rancher/StorageClass/节点标签）不在这里做 —— 见 scale.sh 里
+# 紧接着执行的 30-addons.yml（它是幂等的 helm upgrade --install，顺带补齐新节点标签）。
+# =============================================================================
+- import_playbook: 10-os-init.yml
+- import_playbook: 20-k3s-cluster.yml

@@ -1,0 +1,150 @@
+# {{ ansible_managed }}
+# =============================================================================
+# in-cluster-nfs —— 集群内的"够用版" NFS Server（仅 IN_CLUSTER_NFS=true 时下发）
+# =============================================================================
+# ⚠️⚠️ 重要前提，先读完再开 ⚠️⚠️
+#
+# 1) 这份清单**未在真机上验证过**（本轮只做了静态校验）。开启前请注意：
+#    - 镜像 itsthenetwork/nfs-server-alpine 需要能拉到（内网请先导入，
+#      或把 image 换成内网仓库里的等价镜像）；
+#    - Pod 需要 privileged: true（要跑 rpcbind/nfsd/mountd）；
+#    - rpcbind/mountd 使用固定端口（见下面 Service），容器网络里 NAT 后能不能
+#      稳定协商成功，依赖你环境的内核模块（nfsd, rpcsec_gss_krb5）已加载。
+# 2) 这是"单副本 + 一块 PVC"的简易方案：Pod 挂掉期间所有 NFS PVC 都会 IO 失败。
+#    生产环境请优先用外部 NFS / 云盘；这里只是给"没有外部 NFS"的场景兜底。
+# 3) 导出的是这块 PVC 的根目录（/），{{ prod.nfs.path }} 会在其中自动创建。
+#
+# 验证步骤（开启后人工确认）：
+#   kubectl -n {{ prod.nfs.in_cluster_namespace }} get pod,svc
+#   kubectl -n {{ prod.nfs.in_cluster_namespace }} logs deploy/nfs-server
+#   # 再用一个测试 PVC（storageClassName: {{ prod.nfs.sc_name }}）确认能 Bound
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ prod.nfs.in_cluster_namespace }}
+---
+# 后端存储：用本地盘 SC。注意这会让 NFS 数据落在某个节点的本地盘上（该节点不可用
+# 就丢数据），所以只适合"演示/非关键数据"。有共享存储请改成对应 storageClassName。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-data
+  namespace: {{ prod.nfs.in_cluster_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ prod.localdisk.sc_name }}
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-server
+  namespace: {{ prod.nfs.in_cluster_namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-server
+  template:
+    metadata:
+      labels:
+        app: nfs-server
+    spec:
+      containers:
+        - name: nfs-server
+          image: itsthenetwork/nfs-server-alpine:12
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          env:
+            - name: SHARED_DIR
+              value: /exports
+            - name: SYNC
+              value: "true"
+          ports:
+            - name: nfs
+              containerPort: 2049
+              protocol: TCP
+            - name: nfs-udp
+              containerPort: 2049
+              protocol: UDP
+            - name: rpcbind
+              containerPort: 111
+              protocol: TCP
+            - name: rpcbind-udp
+              containerPort: 111
+              protocol: UDP
+            - name: mountd
+              containerPort: 32767
+              protocol: TCP
+            - name: mountd-udp
+              containerPort: 32767
+              protocol: UDP
+            - name: statd
+              containerPort: 32765
+              protocol: TCP
+            - name: statd-udp
+              containerPort: 32765
+              protocol: UDP
+          volumeMounts:
+            - name: nfs-data
+              mountPath: /exports
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: nfs-data
+          persistentVolumeClaim:
+            claimName: nfs-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nfs-server
+  namespace: {{ prod.nfs.in_cluster_namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: nfs-server
+  ports:
+    - name: nfs
+      port: 2049
+      targetPort: 2049
+      protocol: TCP
+    - name: nfs-udp
+      port: 2049
+      targetPort: 2049
+      protocol: UDP
+    - name: rpcbind
+      port: 111
+      targetPort: 111
+      protocol: TCP
+    - name: rpcbind-udp
+      port: 111
+      targetPort: 111
+      protocol: UDP
+    - name: mountd
+      port: 32767
+      targetPort: 32767
+      protocol: TCP
+    - name: mountd-udp
+      port: 32767
+      targetPort: 32767
+      protocol: UDP
+    - name: statd
+      port: 32765
+      targetPort: 32765
+      protocol: TCP
+    - name: statd-udp
+      port: 32765
+      targetPort: 32765
+      protocol: UDP

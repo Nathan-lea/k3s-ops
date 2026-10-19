@@ -1,0 +1,163 @@
+---
+# =============================================================================
+# 50-scale-remove.yml —— 缩容：把节点从集群里摘掉
+# =============================================================================
+# 由 scale.sh remove 调用（会先做安全检查，并传入 prod_remove_target / prod_remove_role）。
+#
+# 做的事（复用父角色 k3s-manage 的 remove-node）:
+#   cordon → drain --ignore-daemonsets --delete-emptydir-data --force → delete node
+#   → 停 k3s/k3s-agent 并禁用开机自启 → 删除 /var/lib/rancher/k3s
+#
+# 然后额外补一步（父角色没有的）: 从 etcd 里摘掉 member。
+#   为什么必须做: etcd 集群的成员数决定 quorum。3 member 里死 1 个还有 quorum（2/3），
+#   但如果你之后又加一台新 server（变 4 member），2 个死成员 → 需要 3 票却没有 → 集群直接不可写。
+#   官方文档（Removing a server node）也是要求用 etcdctl member remove。
+#
+# ⚠️ 数据: /var/lib/rancher/k3s 会被删掉，节点上的本地盘数据（LOCALDISK_PATH）**不删**，
+#    需要清理请手工处理。
+# =============================================================================
+- name: 缩容 —— 从集群摘除节点
+  hosts: remove_target
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+
+  vars:
+    k3s_action: remove-node
+
+  tasks:
+    - name: 安全检查 —— 不允许删掉最后一台 server
+      assert:
+        that:
+          - not (node_role == 'server' and (prod_server_count | int) <= 1)
+        fail_msg: >-
+          拒绝执行: {{ inventory_hostname }} 是最后一台 role=server 的节点，
+          删掉它集群的控制面就没了。要销毁集群请用 bootstrap.sh destroy 的等价流程
+          （或直接从 config/ipam.yml 里删掉整段后重建）。
+        success_msg: "安全检查通过: {{ inventory_hostname }} ({{ node_role }})"
+
+    - name: 摘除节点（cordon / drain / delete / 停服务 / 清数据）
+      include_role:
+        name: k3s-manage
+
+    - name: 摘除结果
+      debug:
+        msg:
+          - "{{ inventory_hostname }} 已从集群摘除（drain: {{ '忽略错误执行' }}）"
+          - "k3s 服务已停止并禁用开机自启，{{ k3s_data_dir }} 已删除"
+          - "节点上的本地盘数据 {{ prod_localdisk_path }} 未被删除，请按需手工清理"
+
+# -----------------------------------------------------------------------------
+- name: 缩容 —— 清理 etcd member（仅当被摘除的是 server）
+  hosts: first_server
+  gather_facts: false
+  become: true
+
+  vars:
+    prod_etcd_tls: /var/lib/rancher/k3s/server/tls/etcd
+    prod_etcdctl_cmd: >-
+      etcdctl --endpoints=https://127.0.0.1:2379
+      --cacert={{ prod_etcd_tls }}/server-ca.crt
+      --cert={{ prod_etcd_tls }}/client.crt
+      --key={{ prod_etcd_tls }}/client.key
+
+  tasks:
+    - name: 跳过（被摘除的是 agent，不涉及 etcd）
+      debug:
+        msg: "{{ prod_remove_target }} 是 agent，无需处理 etcd member"
+      when: prod_remove_role != 'server'
+
+    - name: 检查 etcdctl 是否存在
+      command: which etcdctl
+      register: prod_etcdctl
+      changed_when: false
+      failed_when: false
+      when: prod_remove_role == 'server'
+
+    - name: 从 etcd 移除 member
+      shell: |
+        set -eu
+        export ETCDCTL_API=3
+        cmd="{{ prod_etcdctl_cmd }}"
+        mid=$($cmd member list -w json | python3 -c '
+        import json, sys
+        target = sys.argv[1]
+        data = json.load(sys.stdin)
+        for m in data.get("members", []):
+            if m.get("name") == target:
+                print("%x" % m["ID"])
+                break
+        ' "{{ prod_remove_target }}")
+        if [ -z "$mid" ]; then
+          echo "MEMBER-NOT-FOUND"
+          exit 0
+        fi
+        $cmd member remove "$mid"
+        echo "MEMBER-REMOVED:$mid"
+      register: prod_etcd_remove
+      changed_when: "'MEMBER-REMOVED:' in prod_etcd_remove.stdout"
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) == 0
+
+    - name: etcd member 已移除
+      debug:
+        msg: "已移除 etcd member（{{ prod_remove_target }}）: {{ prod_etcd_remove.stdout | trim }}"
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) == 0
+
+    - name: etcd member 里没有该节点（可能已经不在 etcd 里）
+      debug:
+        msg: "etcd member list 里没有 {{ prod_remove_target }}，跳过"
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) == 0
+        - "'MEMBER-NOT-FOUND' in prod_etcd_remove.stdout | default('')"
+
+    - name: ⚠️ 本机没有 etcdctl —— 必须手工摘除 member
+      debug:
+        msg:
+          - "在任意存活的 server 节点上执行下面两步（否则残留 member 会导致后续扩容丢 quorum）："
+          - "1) 安装 etcdctl（例如 apt-get install -y etcd-client，或从内网拿静态二进制）"
+          - "2) 找到 member id 并移除："
+          - "   {{ prod_etcdctl_cmd }} member list -w json"
+          - "   {{ prod_etcdctl_cmd }} member remove <上面输出里 name={{ prod_remove_target }} 那个 member 的 ID(hex)>"
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) != 0
+
+    - name: 剩余 etcd member 列表
+      shell: "{{ prod_etcdctl_cmd }} member list -w table"
+      register: prod_etcd_members
+      changed_when: false
+      failed_when: false
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) == 0
+
+    - name: 打印剩余 member
+      debug:
+        msg: "{{ prod_etcd_members.stdout_lines | default([]) }}"
+      when:
+        - prod_remove_role == 'server'
+        - prod_etcdctl.rc | default(1) == 0
+
+# -----------------------------------------------------------------------------
+- name: 缩容 —— 收尾确认
+  hosts: first_server
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: 当前集群节点
+      command: kubectl get nodes -o wide --no-headers
+      register: prod_nodes_after
+      changed_when: false
+
+    - name: 结果
+      debug:
+        msg:
+          - "剩余节点:"
+          - "{{ prod_nodes_after.stdout_lines }}"
+          - "记得从 config/ipam.yml 里删掉 {{ prod_remove_target }} 那一行，保持清单与实际一致。"

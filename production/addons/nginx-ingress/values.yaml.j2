@@ -1,0 +1,77 @@
+# {{ ansible_managed }}
+# =============================================================================
+# nginx-ingress —— 直接占宿主机 80/443，不做 NodePort
+# =============================================================================
+# 关键取值（改之前先读 docs/ingress-80-443-exposure.md）：
+#   hostNetwork: true  + containerPort 80/443  →  任意节点 IP 的 80/443 都能进
+#   service.enabled: false                     →  不创建 NodePort/LoadBalancer Service
+#   kind: DaemonSet                            →  每个节点一个副本，不做"入口单点"
+#   publishService.enabled: false              →  没有 Service 可发布，靠 reportNodeInternalIp
+#   reportNodeInternalIp: true                 →  Ingress status 里显示节点 IP
+# admissionWebhooks 仍然保留：它有自己独立的 Service（*-admission），
+# 与 service.enabled 无关，所以关掉主 Service 不会破坏校验准入。
+# =============================================================================
+controller:
+  kind: {{ prod.ingress.kind }}
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+
+  # hostNetwork 下容器端口就是宿主端口，不需要再声明 hostPort
+  hostPort:
+    enabled: false
+  containerPort:
+    http: {{ prod.ingress.http_port }}
+    https: {{ prod.ingress.https_port }}
+
+  service:
+    enabled: false
+    external:
+      enabled: false
+    internal:
+      enabled: false
+
+  publishService:
+    enabled: false
+  reportNodeInternalIp: true
+
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true
+
+  config:
+    # 上游有 LB 时才需要；这里直连节点，保留 true 便于未来加前置 LB
+    use-forwarded-headers: "true"
+    # Rancher UI 上传/导入镜像等场景会传大 body
+    proxy-body-size: "100m"
+
+  admissionWebhooks:
+    enabled: true
+
+  metrics:
+    enabled: true
+    service:
+      enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+{% if prod.ingress.node_selector %}
+  # 只让带指定 label 的节点承载入口（config/cluster.env 的 INGRESS_NODE_SELECTOR）
+  nodeSelector:
+{% for pair in prod.ingress.node_selector.split(',') %}
+{% set kv = pair.split('=') %}
+    "{{ kv[0] | trim }}": "{{ (kv[1] | default('')) | trim }}"
+{% endfor %}
+{% endif %}
+
+# 没有 default backend（没有 service 可指）
+defaultBackend:
+  enabled: false
+
+tcp: {}
+udp: {}

@@ -1,0 +1,118 @@
+---
+# =============================================================================
+# 20-k3s-cluster.yml —— 安装 k3s（第一个 server init，其余节点 join）
+# =============================================================================
+# 复用父角色:
+#   k3s-server —— 第一个 role: server 的节点带 cluster-init: true；其余 server 走 etcd join
+#   k3s-agent  —— 通过 first_server_host 的 node-token 加入
+#
+# 任务顺序很关键: Ansible 按任务在所有主机上同步推进，所以"所有 server 装完"必然
+# 早于"agent 加入"，无需 serial。
+# =============================================================================
+- name: 部署 k3s 集群
+  hosts: k3s_cluster
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # 二进制来源确认（offline / 版本纠偏）
+    # -------------------------------------------------------------------------
+    - name: 检测集群是否已初始化过
+      stat:
+        path: "{{ k3s_data_dir }}/server/db/etcd"
+      register: prod_etcd_dir
+
+    - name: 离线模式 —— 确认 k3s 二进制已就位
+      stat:
+        path: "{{ k3s_server_bin }}"
+      register: prod_k3s_bin
+      when: k3s_skip_download | bool
+
+    - name: 离线模式 —— 缺少二进制则失败
+      assert:
+        that:
+          - prod_k3s_bin.stat.exists | default(false)
+          - prod_k3s_bin.stat.executable | default(false)
+        fail_msg: >-
+          {{ inventory_hostname }} 上 {{ k3s_server_bin }} 不存在或不可执行。
+          修复: 在控制机执行 scripts/offline-load.sh 分发制品，或把 K3S_INSTALL_MODE 改成 online。
+      when: k3s_skip_download | bool
+
+    - name: 读取节点上已有的 k3s 版本
+      command: "{{ k3s_server_bin }} --version"
+      register: prod_k3s_installed
+      changed_when: false
+      failed_when: false
+
+    - name: 清理版本不一致的旧二进制（仅未初始化的节点，让 get_url 重新下载）
+      file:
+        path: "{{ k3s_server_bin }}"
+        state: absent
+      when:
+        - not (k3s_skip_download | bool)
+        - not prod_etcd_dir.stat.exists
+        - prod_k3s_installed.rc | default(1) == 0
+        - k3s_version not in (prod_k3s_installed.stdout | default(''))
+
+    - name: 已初始化的节点上版本不一致 —— 只提示，不做半截升级
+      debug:
+        msg: >-
+          注意: {{ inventory_hostname }} 已初始化，但二进制版本与目标 {{ k3s_version }} 不一致
+          ({{ (prod_k3s_installed.stdout | default('未知')).split(' ')[0:2] | join(' ') }})。
+          换版本请走 k3s-ops.sh upgrade / 逐节点替换流程，本 playbook 不会动已运行的集群。
+      when:
+        - prod_etcd_dir.stat.exists
+        - prod_k3s_installed.rc | default(1) == 0
+        - k3s_version not in (prod_k3s_installed.stdout | default(''))
+
+    # -------------------------------------------------------------------------
+    # 安装
+    # -------------------------------------------------------------------------
+    - name: 安装 k3s server
+      include_role:
+        name: k3s-server
+      when: node_role == 'server'
+
+    - name: 安装 k3s agent
+      include_role:
+        name: k3s-agent
+      when: node_role == 'agent'
+
+    # -------------------------------------------------------------------------
+    # 写回 KUBECONFIG（父角色的 init.yml 只会 fetch 到 {{ playbook_dir }}/../..
+    # 也就是 production/kubeconfig，且 server 字段是 127.0.0.1）
+    # -------------------------------------------------------------------------
+    - name: 提示 kubeconfig 位置
+      debug:
+        msg: >-
+          kubeconfig: {{ prod_dir }}/kubeconfig
+          （父角色 fetch 出来的 server 字段是 127.0.0.1，外部使用需指向
+          {{ first_server_ip }}:6443；执行 scripts/kubeconfig.sh 自动修正）
+      run_once: true
+      when: node_ip == first_server_ip
+
+# -----------------------------------------------------------------------------
+- name: 集群就绪校验
+  hosts: first_server
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: 等待全部节点 Ready
+      command: kubectl wait --for=condition=Ready node --all --timeout=180s
+      register: prod_kubectl_wait
+      changed_when: false
+      retries: 6
+      delay: 15
+      until: prod_kubectl_wait.rc == 0
+
+    - name: 集群状态
+      command: kubectl get nodes -o wide --no-headers
+      register: prod_kubectl_nodes
+      changed_when: false
+
+    - name: 打印节点列表
+      debug:
+        msg: "{{ prod_kubectl_nodes.stdout_lines }}"

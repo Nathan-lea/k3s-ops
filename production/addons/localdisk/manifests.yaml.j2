@@ -1,0 +1,171 @@
+# {{ ansible_managed }}
+# =============================================================================
+# localdisk —— 自管 local-path-provisioner（清单方式，不用 Helm chart）
+# =============================================================================
+# 为什么自管清单而不是 helm:
+#   1) 上游 local-path-provisioner 的 chart 已不在 charts.rancher.io 分发；
+#   2) 只为了一个 Deployment + CacheMap + SC 引一个 chart 不划算；
+#   3) 这份清单与 k3s 内置的 /var/lib/rancher/k3s/server/manifests/local-storage.yaml
+#      结构一致（已核对过真机），差别只有：命名空间、SC 名、落盘路径、镜像版本。
+#
+# 为什么必须把 k3s 内置的关掉（k3s_config.disable_local_storage=true）:
+#   内置清单由 k3s 在启动时反复 apply，手工 patch 会被静默回滚；两个 provisioner
+#   同时抢 rancher.io/local-path 会互相打架。
+#
+# 存卷位置: {{ prod.localdisk.path }}/pvc-<uuid>_<namespace>_<pvc-name>
+#   setup 脚本里的 `chmod 700 "${VOL_DIR}/.."` 会把父目录收回 700，
+#   这是上游行为（子目录仍是 0777，供 Pod 内非 root 用户写入）。
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ prod.localdisk.namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: local-path-provisioner-service-account
+  namespace: {{ prod.localdisk.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: local-path-provisioner-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "persistentvolumeclaims", "configmaps", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["endpoints", "persistentvolumes", "pods"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: local-path-provisioner-bind
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: local-path-provisioner-role
+subjects:
+  - kind: ServiceAccount
+    name: local-path-provisioner-service-account
+    namespace: {{ prod.localdisk.namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: {{ prod.localdisk.namespace }}
+data:
+  config.json: |-
+    {
+      "nodePathMap": [
+        {
+          "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+          "paths": ["{{ prod.localdisk.path }}"]
+        }
+      ]
+    }
+  setup: |-
+    #!/bin/sh
+    set -eu
+    mkdir -m 0777 -p "${VOL_DIR}"
+    chmod 700 "${VOL_DIR}/.."
+  teardown: |-
+    #!/bin/sh
+    set -eu
+    rm -rf "${VOL_DIR}"
+  helperPod.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: helper-pod
+          image: "{{ prod.localdisk.helper_image }}"
+          imagePullPolicy: IfNotPresent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-path-provisioner
+  namespace: {{ prod.localdisk.namespace }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: local-path-provisioner
+  template:
+    metadata:
+      labels:
+        app: local-path-provisioner
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: local-path-provisioner-service-account
+      # server 节点如果将来打上 NoSchedule 污点，这里保证 provisioner 仍能调度
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: local-path-provisioner
+          image: "{{ prod.localdisk.image }}"
+          imagePullPolicy: IfNotPresent
+          command:
+            - local-path-provisioner
+            - start
+            - --config
+            - /etc/config/config.json
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/config/
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: config-volume
+          configMap:
+            name: local-path-config
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ prod.localdisk.sc_name }}
+  annotations:
+    # Rancher UI 用来标记"这是节点本地盘"，不代表 k8s 语义
+    defaultVolumeType: "local"
+    storageclass.kubernetes.io/is-default-class: "{{ 'true' if prod.localdisk.is_default else 'false' }}"
+provisioner: rancher.io/local-path
+reclaimPolicy: {{ prod.localdisk.reclaim_policy }}
+volumeBindingMode: WaitForFirstConsumer
