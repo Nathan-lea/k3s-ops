@@ -50,3 +50,4 @@
 
 - name: Configure firewall
   include_tasks: firewall.yml
+  when: use_ufw | default(true)
