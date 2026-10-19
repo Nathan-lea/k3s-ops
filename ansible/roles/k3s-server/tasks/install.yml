@@ -6,6 +6,8 @@
     mode: '0755'
     timeout: 120
   register: k3s_download
+  # offline 模式: 二进制已由离线流程预先放到 k3s_server_bin，不能再下载覆盖
+  when: not (k3s_skip_download | default(false))
 
 - name: Create symlink for kubectl
   file:

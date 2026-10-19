@@ -8,6 +8,16 @@ mirrors:
 {% endfor %}
 {% endfor %}
 configs:
+{% set _creds = containerd_registry_credentials | default({}) %}
+{% if _creds | length > 0 %}
+{% for host, cred in _creds.items() %}
+  "{{ host }}":
+    auth:
+      username: "{{ cred.username }}"
+      password: "{{ cred.password }}"
+{% endfor %}
+{% else %}
   "docker.io":
     auth: {}
+{% endif %}
 {% endif %}
