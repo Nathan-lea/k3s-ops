@@ -1,0 +1,27 @@
+# =============================================================================
+# production/.gitignore —— 生成物与敏感文件不入库
+# =============================================================================
+
+# 生成的 Ansible inventory（含真实 IP、RANCHER_BOOTSTRAP_PASSWORD、私钥路径）
+# 由 lib/inventory.sh 每次 bootstrap/scale 重新生成，改了也会被覆盖
+ansible/inventory/
+
+# 运行日志
+logs/
+
+# 状态目录（私钥 ops_id_ed25519 等）
+.state/
+
+# 最终 kubeconfig（含真实集群凭据）
+kubeconfig
+
+# 本地覆盖配置（真实密码/凭据）
+config/cluster.env.local
+
+# 离线制品（由 scripts/fetch-artifacts.sh 生成，体积大）
+artifacts/*
+!artifacts/README.md
+
+# chart 包（*.tgz 由根 .gitignore 排除；这里也补一份防止误提交）
+charts/*.tgz
+!charts/README.md

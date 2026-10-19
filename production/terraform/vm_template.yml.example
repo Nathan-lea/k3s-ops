@@ -1,0 +1,57 @@
+# =============================================================================
+# VM 模板参数示例（不是 terraform 代码，只是约定字段）
+# =============================================================================
+# 用途：定义"从哪个模板克隆出多少台 k3s 节点 VM"。
+# 后续接入 Terraform 时，这个文件可以被 Terraform 的 data source 或
+# 外部脚本读取，或者人工按此准备 VM 后把结果写入 config/ipam.yml。
+#
+# 本期 bootstrap.sh 不读这个文件；只是占个位，说明后续动态扩容时 VM 从哪来。
+# =============================================================================
+
+# 镜像/模板来源（二选一）
+source:
+  # vSphere 模板
+  # vsphere_template: "ubuntu-22.04-k3s-baseline"
+  # 或 OpenStack 镜像
+  # openstack_image: "ubuntu-22.04-minimal"
+  # 或 Packer 构建出的 ISO/AMI
+  # ami_id: "ami-xxxxxxxxxxxxx"
+  note: "此处按你的虚拟化平台填对应字段"
+
+# 节点规格（server 与 agent 可分别配置）
+node_spec:
+  server:
+    cpu: 2
+    memory_mb: 4096
+    disk_gb: 40
+    # 网络：静态 IP 从 config/ipam.yml 读，不在此处重复定义
+  agent:
+    cpu: 4
+    memory_mb: 8192
+    disk_gb: 80
+    # 本地盘挂载点（对应 LOCALDISK_PATH）
+    extra_disks:
+      - size_gb: 200
+        mount_path: "/opt/k8s-local-path"
+
+# 操作系统前置（bootstrap.sh 的 10-os-init.yml 会做，这里只记录"必须要有"的前提）
+os_baseline:
+  os: "Ubuntu 22.04 LTS"
+  ssh_user: "root"
+  # bootstrap 第一次用密码连，之后切 ops + 密钥
+  requirements:
+    - "python3 >= 3.8（Ansible 需要）"
+    - "能访问 config/ipam.yml 里的所有节点 IP"
+    - "静态 IP 已配好（或 DHCP 保留）"
+
+# 输出到 ipam.yml 的格式示例（扩容时由人工或脚本追加）
+#
+# nodes:
+#   - hostname: xxx-k8s-03
+#     ip: 192.168.100.13
+#     role: server
+#   - hostname: xxx-k8s-04
+#     ip: 192.168.100.14
+#     role: agent
+#     labels:
+#       node-role.example.com/worker: "true"
