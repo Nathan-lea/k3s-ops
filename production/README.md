@@ -1,6 +1,6 @@
 # production/ —— 一条命令把 N 台裸机变成可用的 k3s 集群
 
-> 设计文档：[docs/superpowers/specs/2026-10-19-production-bootstrap-design.md](../docs/superpowers/specs/2026-10-19-production-bootstrap-design.md)
+> 设计文档：[design.md](design.md)
 > 本文是操作手册，只讲"怎么用、改哪里"。
 
 ---
@@ -415,7 +415,7 @@ vim production/config/ipam.yml   # 加一个节点条目
 
 ## 文档
 
-- 设计文档：[../docs/superpowers/specs/2026-10-19-production-bootstrap-design.md](../docs/superpowers/specs/2026-10-19-production-bootstrap-design.md)
+- 设计文档：[design.md](design.md)
 - Ingress 端口设计：[../docs/ingress-80-443-exposure.md](../docs/ingress-80-443-exposure.md)
 - 生产扩容方案：[../docs/k3s-production-scaling-plan.md](../docs/k3s-production-scaling-plan.md)
 - 已知限制（本轮未真机验证）：设计文档 §15 验证清单里标注 `⚠️ 未真机验证` 的项目（bootstrap 端到端、hostNetwork 80/443、StorageClass、in-cluster NFS、Rancher 登录）

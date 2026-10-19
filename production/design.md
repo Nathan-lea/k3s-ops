@@ -544,7 +544,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 两种 StorageClass 实际出 PVC、Rancher 登录 —— 均**未在真机验证**，首次真机运行请按 README 的
 "首次运行检查清单"逐项确认。
 
-证据落盘：`production/logs/`、`production/.state/`、以及 `docs/superpowers/specs/` 下的运行记录（如执行则补）。
+证据落盘：`production/logs/`、`production/.state/`；运行记录直接追加在本文档 §15 末尾。
 
 **本轮实际结果（2026-10-19 静态校验）**：
 
