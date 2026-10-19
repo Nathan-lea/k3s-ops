@@ -1,0 +1,130 @@
+---
+# =============================================================================
+# 10-os-init.yml —— 服务器安装前参数设置（教程第 45 章的清单，落到代码里）
+# =============================================================================
+# 复用父角色 k3s-common 拿到: 主机名 / swap 关闭 / 内核模块 / sysctl /
+# registries.yaml / ufw 基础规则。本 playbook 补齐父角色没有的部分:
+#   基础包、时区、chrony、limits、/etc/hosts、LOCALDISK_PATH 目录、ufw 生产规则
+#
+# 幂等: 重复执行不会产生额外变更（安装包已是 present、模板内容一致等）。
+# =============================================================================
+- name: 服务器初始化
+  hosts: k3s_cluster
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  roles:
+    - role: k3s-common
+
+  tasks:
+    - name: 安装基础包
+      apt:
+        name:
+          - curl
+          - wget
+          - ethtool
+          - iptables
+          - socat
+          - conntrack
+          - jq
+          - nfs-common
+          - chrony
+          - ca-certificates
+          - rsync
+        state: present
+        update_cache: "{{ prod_apt_update }}"
+        cache_valid_time: 3600
+
+    - name: 写入 /etc/hosts（集群节点互认，避免依赖 DNS）
+      blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} ANSIBLE MANAGED BLOCK k3s-ops"
+        block: |
+          {% for h in groups['k3s_cluster'] | sort %}
+          {{ hostvars[h].node_ip }} {{ h }}
+          {% endfor %}
+
+    - name: 设置时区
+      timezone:
+        name: "{{ prod_timezone }}"
+
+    - name: 部署 chrony 配置
+      template:
+        src: "{{ playbook_dir }}/../files/chrony.conf.j2"
+        dest: /etc/chrony/chrony.conf
+        mode: '0644'
+        backup: true
+      register: prod_chrony_conf
+      when: prod_chrony_servers | length > 0
+
+    - name: 启用 chrony（配置变化时重启）
+      systemd:
+        name: chrony
+        enabled: true
+        state: "{{ 'restarted' if (prod_chrony_conf.changed | default(false)) else 'started' }}"
+      when: prod_chrony_servers | length > 0
+
+    - name: 设置 file limits
+      copy:
+        src: "{{ playbook_dir }}/../files/limits-k8s.conf"
+        dest: /etc/security/limits.d/99-k3s-ops.conf
+        mode: '0644'
+      when: prod_enable_limits | bool
+
+    - name: 创建本地盘目录（localdisk StorageClass 的落盘位置）
+      file:
+        path: "{{ prod_localdisk_path }}"
+        state: directory
+        mode: '0700'
+      when: prod.localdisk.enabled | bool
+
+    # -------------------------------------------------------------------------
+    # ufw 生产规则
+    # -------------------------------------------------------------------------
+    # 父角色只在 ufw 存在时加 k3s 端口规则；这里补上生产必需的几条：
+    #   - 集群内网全端口放行（省去逐端口维护）
+    #   - 80/443 对外（ingress 用 hostNetwork 直接占宿主机端口）
+    #   - SSH 端口（尤其 SSH_PORT != 22 时，不先放行就 enable 会把自己关在门外）
+    # 顺序：先加规则，最后才 enable。
+    # -------------------------------------------------------------------------
+    - name: ufw -- 放行集群内网（全端口互访）
+      ufw:
+        rule: allow
+        from_ip: "{{ ufw_allow_cidr }}"
+      when:
+        - use_ufw | bool
+        - ufw_allow_cidr | length > 0
+
+    - name: ufw -- 放行 ingress 端口
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "{{ prod.ingress.http_port }}"
+        - "{{ prod.ingress.https_port }}"
+      when:
+        - use_ufw | bool
+        - prod.ingress.enabled | bool
+
+    - name: ufw -- 放行 SSH 端口
+      ufw:
+        rule: allow
+        port: "{{ prod_ssh_port }}"
+        proto: tcp
+      when: use_ufw | bool
+
+    - name: ufw -- 启用防火墙（默认拒绝入站）
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+      when: use_ufw | bool
+
+    - name: 初始化完成提示
+      debug:
+        msg: >-
+          {{ inventory_hostname }} 初始化完成（时区 {{ prod_timezone }}，
+          swap 已关，ufw {{ '已启用' if use_ufw | bool else '未启用' }}，
+          本地盘目录 {{ prod_localdisk_path }}）

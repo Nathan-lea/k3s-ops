@@ -1,0 +1,118 @@
+---
+# =============================================================================
+# 05-preflight.yml —— 动手之前先把"会翻车的地方"查出来
+# =============================================================================
+# 设计原则：这一阶段只读，不改任何东西；失败信息必须直接给出修复动作。
+# =============================================================================
+- name: 预检 —— 节点侧
+  hosts: k3s_cluster
+  gather_facts: true
+  become: true
+  any_errors_fatal: true
+
+  tasks:
+    - name: 检查操作系统（只支持 Ubuntu / Debian）
+      assert:
+        that:
+          - ansible_distribution in ['Ubuntu', 'Debian']
+        fail_msg: >-
+          只支持 Ubuntu / Debian，当前是 {{ ansible_distribution }} {{ ansible_distribution_version }}
+        success_msg: "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: 检查 python3 版本（Ansible 需要 >= 3.8）
+      assert:
+        that:
+          - ansible_python_version is version('3.8', '>=')
+        fail_msg: "需要 python3 >= 3.8，当前 {{ ansible_python_version }}"
+
+    - name: 采集根分区可用空间
+      shell: df -Pk / | awk 'NR==2 {print $4}'
+      register: prod_root_avail_kb
+      changed_when: false
+      check_mode: false
+
+    - name: 检查内存与磁盘
+      assert:
+        that:
+          - ansible_memtotal_mb | int >= 1500
+          - prod_root_avail_kb.stdout | trim | int >= 8388608
+        fail_msg: >-
+          资源不足：内存 {{ ansible_memtotal_mb }}MB（需 >= 1500MB）/
+          根分区可用 {{ ((prod_root_avail_kb.stdout | trim | int) / 1048576) | round(1) }}GiB（需 >= 8GiB）
+
+    - name: 检查 swap 是否已关闭（未关会在初始化阶段被关掉，这里只是提示）
+      assert:
+        that:
+          - ansible_swaptotal_mb | int == 0
+        fail_msg: "检测到 swap 已启用（{{ ansible_swaptotal_mb }}MB）：初始化会执行 swapoff 并清理 /etc/fstab"
+        success_msg: "swap 已关闭"
+      ignore_errors: true
+
+    - name: 检测 k3s 是否已经安装过
+      stat:
+        path: "{{ k3s_data_dir }}/server"
+      register: prod_k3s_server_dir
+
+    - name: 检查 80/443 是否空闲（只在集群尚未安装时强校验）
+      shell: ss -tlnH | awk '{print $4}' | grep -E ':(80|443)$' | sort -u || true
+      register: prod_ports_in_use
+      changed_when: false
+      check_mode: false
+      when: not prod_k3s_server_dir.stat.exists
+
+    - name: 端口被占用则直接失败（ingress 用 hostNetwork 绑定宿主机 80/443）
+      assert:
+        that:
+          - prod_ports_in_use.stdout | trim == ''
+        fail_msg: >-
+          {{ inventory_hostname }} 的 80/443 已被占用：{{ prod_ports_in_use.stdout | trim }}。
+          请先 `ss -tlnp | grep -E ':(80|443)'` 找出占用进程并停掉（nginx/apache/httpd 等）。
+      when: not prod_k3s_server_dir.stat.exists
+
+    - name: 已有集群的提示
+      debug:
+        msg: >-
+          {{ inventory_hostname }} 已存在 k3s 数据目录（{{ k3s_data_dir }}/server）：
+          本次将跳过 etcd 初始化/加入，只做幂等更新。
+      when: prod_k3s_server_dir.stat.exists
+
+# -----------------------------------------------------------------------------
+- name: 预检 —— 控制机侧（chart 与制品）
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: 检查离线 chart 是否齐全
+      stat:
+        path: "{{ item }}"
+      register: prod_chart_stat
+      loop: "{{ prod_expected_charts }}"
+      when: prod_expected_charts | length > 0
+
+    - name: 缺少 chart 则失败（CHARTS_MODE=local）
+      assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          缺少离线 chart：{{ item.item }}。
+          修复：在有网的机器上执行 scripts/fetch-artifacts.sh，或把 CHARTS_MODE 改成 repo。
+      loop: "{{ prod_chart_stat.results | default([]) }}"
+      when: prod_expected_charts | length > 0
+
+    - name: 提示（CHARTS_MODE=repo 时不做离线校验）
+      debug:
+        msg: "CHARTS_MODE=repo：跳过离线 chart 校验（安装时从 Helm 仓库拉取）"
+      when: prod_expected_charts | length == 0
+
+    - name: 预检汇总
+      debug:
+        msg:
+          - "集群: {{ cluster_name }} ({{ prod.cluster_name }})"
+          - "k3s: {{ k3s_version }}"
+          - "CNI: {{ k3s_config.flannel_backend }} / pod {{ k3s_config.cluster_cidr }} / svc {{ k3s_config.service_cidr }}"
+          - "本地盘: {{ prod.localdisk.sc_name }}{{ ' (默认 SC)' if prod.localdisk.is_default else '' }} @ {{ prod.localdisk.path }}"
+          - "NFS: {{ prod.nfs.sc_name }} @ {{ prod.nfs.server }}:{{ prod.nfs.path }}（in-cluster={{ prod.nfs.in_cluster }}）"
+          - "Ingress: {{ prod.ingress.kind }} hostNetwork {{ prod.ingress.http_port }}/{{ prod.ingress.https_port }}"
+          - "Rancher: {{ '启用 ' ~ prod.rancher.hostname ~ ' (tls=' ~ prod.rancher.tls_source ~ ')' if prod.rancher.enabled else '禁用' }}"

@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+#
+# 由 production/ansible/playbooks/10-os-init.yml 下发。
+# 上游 NTP 源来自 config/cluster.env 的 CHRONY_SERVERS（逗号分隔，多台时都列上）
+#
+# 为什么必须要: k3s 的 TLS 证书签发、etcd 选举都对节点时间敏感，
+# 节点时间漂移会导致证书校验失败 / 选主抖动。
+
+{% for srv in prod_chrony_servers.split(',') %}
+server {{ srv | trim }}
+{% endfor %}
+
+driftfile /var/lib/chrony/chrony.drift
+logdir /var/log/chrony
+maxupdateskew 100.0
+rtcsync
+makestep 1 3
