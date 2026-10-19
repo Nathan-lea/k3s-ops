@@ -27,24 +27,40 @@ ALLOW_IPS=(
   "10.42.0.0" "10.42.1.0" "10.43.0.0" "10.43.1.0" "10.43.197.0"
   "10.0.2.15" "10.0.2.2"
   "10.0.2.0" "10.0.2.3" "10.0.2.4" "10.0.3.0"   # VirtualBox NAT 固定地址（architecture.md 2.5）
+  # production/ 的示例拓扑（config/ipam.yml + config/cluster.env*，设计内占位网段）
+  "192.168.100.0" "192.168.100.1" "192.168.100.11" "192.168.100.12"
+  "192.168.100.13" "192.168.100.14" "192.168.100.50"
 )
 # 已确认接受的演示占位密码（设计的一部分，用户明确选择不处理）
-ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********' "s3cret" "abc")
+# ChangeMe* 是 production/config/cluster.env.local.example 里的明文占位值，
+# 与真实凭据无关（真实值放 gitignore 掉的 cluster.env.local）。
+ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********' "s3cret" "abc" "ChangeMe")
 
 # 已知的"非用户本地路径"（系统/容器/教程演示路径，不构成隐私泄漏）
 # 规则1 会拦截 /data/、/mnt/、/root/ 等疑似本机路径；以下为明确非本机数据路径，予以豁免。
 ALLOW_PATH_PATTERNS=(
-  "/data/current"       # k3s 节点内置二进制固定路径 (/var/lib/rancher/k3s/data/current/...)
-  "/data/test.txt"      # 05章容器内 PV 演示挂载路径（教程刻意内容）
+  "/data/current"        # k3s 节点内置二进制固定路径 (/var/lib/rancher/k3s/data/current/...)
+  "/data/test.txt"       # 05章容器内 PV 演示挂载路径（教程刻意内容）
+  "/data/k8s-local-path" # production/ LOCALDISK_PATH 默认值（production/config/cluster.env.local.example）
 )
 
 # 检查脚本自身（内含正则字符串，不参与内容扫描）
 ALLOW_SELF_FILES=("scripts/privacy-check.sh")
 
+# 规则8（敏感文件名）豁免清单：文件名敏感但内容是模板/脚本，非凭据本身。
+# 只放宽文件名判断，内容仍走规则 1~7。
+ALLOW_SENSITIVE_FILES=(
+  "production/config/cluster.env"              # 主配置模板（只放占位值，真实凭据在 cluster.env.local）
+  "production/config/cluster.env.local.example" # 同上，ChangeMe* 占位密码
+  "production/scripts/kubeconfig.sh"           # 脚本名含 kubeconfig，内容无凭据
+  "scripts/get-kubeconfig.sh"                  # 同上（原有豁免，集中到本清单）
+)
+
 # ===== 工具函数 =====
 is_allow_ip() { for a in "${ALLOW_IPS[@]}"; do [ "$1" = "$a" ] && return 0; done; return 1; }
 is_allow_pass() { for a in "${ALLOW_PASS_VALUES[@]}"; do case "$1" in *"$a"*) return 0;; esac; done; return 1; }
 is_self() { for a in "${ALLOW_SELF_FILES[@]}"; do [ "$1" = "$a" ] && return 0; done; return 1; }
+is_allow_sensitive_name() { for a in "${ALLOW_SENSITIVE_FILES[@]}"; do [ "$1" = "$a" ] && return 0; done; return 1; }
 
 declare -a ISSUES=()
 declare -i FAIL=0
@@ -126,10 +142,11 @@ for f in "${FILES[@]}"; do
       ;;
   esac
 
-  # 规则8: 敏感文件名
+  # 规则8: 敏感文件名（先过 ALLOW_SENSITIVE_FILES 白名单——模板/脚本类，非凭据本身）
   case "$f" in
     *kubeconfig*|*.pem|*.key|*.p12|*.pfx|*.jks|*id_rsa*|*id_ed25519*|*.env|*.env.*)
-      case "$f" in scripts/get-kubeconfig.sh) ;; *) add_issue "[敏感文件: $f]" ;; esac ;;
+      is_allow_sensitive_name "$f" || add_issue "[敏感文件: $f]"
+      ;;
   esac
 done
 
