@@ -1,0 +1,54 @@
+# =============================================================================
+# registries.yaml 参考样例（不是被直接读取的文件）
+# =============================================================================
+# 真正生效的文件是各节点上的 /etc/rancher/k3s/registries.yaml，由父仓库的
+# ansible/roles/k3s-common/tasks/containerd.yml 依据 containerd_mirrors 变量生成，
+# 而 containerd_mirrors 由 production/lib/inventory.sh 从 cluster.env 拼出来。
+#
+# 所以：**不要手改节点的 registries.yaml**（改完下次 bootstrap 会被覆盖）。
+# 要改就改 production/config/cluster.env（或 cluster.env.local）。
+#
+# 本文件只用于对照"最终生成的长什么样"。
+# =============================================================================
+
+# ---------- 场景 A：沿用父仓库的公网加速（默认，什么都不用配）----------
+mirrors:
+  docker.io:
+    endpoint:
+      - "https://docker.1panel.live"
+      - "https://docker-0.unsee.tech"
+  quay.io:
+    endpoint:
+      - "https://quay.mirrors.ustc.edu.cn"
+  gcr.io:
+    endpoint:
+      - "https://gcr.mirrors.ustc.edu.cn"
+configs:
+  "docker.io":
+    auth: {}
+
+# ---------- 场景 B：内网 Artifactory（后期接入）----------
+# 对应 cluster.env：
+#   REGISTRY_ENDPOINT=artifactory.example.com
+#   REGISTRY_PATH_PREFIX=docker-remote
+#   REGISTRY_USERNAME=<user>      # 建议放 cluster.env.local
+#   REGISTRY_PASSWORD=<token>
+#
+# mirrors:
+#   docker.io:
+#     endpoint:
+#       - "https://artifactory.example.com/docker-remote"
+#   registry.k8s.io:
+#     endpoint:
+#       - "https://artifactory.example.com/k8s-remote"
+#   quay.io:
+#     endpoint:
+#       - "https://artifactory.example.com/quay-remote"
+#   gcr.io:
+#     endpoint:
+#       - "https://artifactory.example.com/gcr-remote"
+# configs:
+#   "artifactory.example.com":
+#     auth:
+#       username: <user>
+#       token: <artifactory-token>   # 字段名在真实文件里写 password
