@@ -371,6 +371,29 @@ vim production/config/ipam.yml   # 加一个节点条目
 
 ---
 
+## 首次真机运行检查清单
+
+本轮**没有真机验证**（用户确认 A1），下面这些只有你第一次在真机跑过才算数。跑完逐项打勾：
+
+| # | 检查项 | 怎么确认 |
+|---|---|---|
+| 1 | bootstrap 端到端跑通 | `./production/bootstrap.sh` 全绿，中途无手工干预 |
+| 2 | ops 账号生效、root 已收紧 | 换个终端 `ssh -i production/.state/ops_id_ed25519 ops@<节点IP>` 能进；`ssh root@<节点IP>` 按 `ROOT_SSH_POLICY` 被拒 |
+| 3 | 端口已切到 `SSH_PORT` | `ssh -p <SSH_PORT> ops@<节点IP>` 能进（若改过端口） |
+| 4 | 节点 Ready | `kubectl get nodes` 全部 `Ready`，版本是 `K3S_RESOLVED_VERSION` 解析出的那个 |
+| 5 | hostNetwork ingress 真的占了 80/443 | `ss -tlnp \| grep -E ':(80\|443)'` 在**每个**节点上都有 ingress-nginx；`curl http://<任意节点IP>/` 返回 404（说明是 ingress 在应答） |
+| 6 | localdisk 出 PVC | 按"存储"一节建 `test-pvc` → `Bound`；节点 `LOCALDISK_PATH` 下出现对应目录 |
+| 7 | nfs-client 出 PVC（若启用了 NFS） | 建 `nfs-pvc` → `Bound`；NFS server 上出现子目录 |
+| 8 | in-cluster NFS（若开启） | `nfs-system` 与 `nfs-provisioner` 两个 ns 的 pod 都 Ready |
+| 9 | cert-manager 就绪 | `kubectl get pods -n cert-manager` 全 Ready，无 `CrashLoopBackOff` |
+| 10 | Rancher 能登录 | `https://<任意节点IP>/`（Host 头为 `RANCHER_HOSTNAME`）出登录页，用 `RANCHER_BOOTSTRAP_PASSWORD` 能登进去 |
+| 11 | 时区与时间同步 | `timedatectl` 显示 `Asia/Shanghai`；`chronyc tracking` 的偏移在毫秒级 |
+| 12 | 缩容演练（可选但强烈建议） | `./production/scale.sh remove <某台>` 后 `etcdctl member list` 少一个 member，`kubectl get nodes` 少一个节点 |
+
+任何一项不符，先看 `production/logs/production.log`，再回来对照设计文档 §18。
+
+---
+
 ## 安全说明
 
 - 初始化后**只有 ops 用户**可用密钥登录，root 登录已按 `ROOT_SSH_POLICY` 收紧（默认 `prohibit-password`）
