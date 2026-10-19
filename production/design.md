@@ -103,8 +103,9 @@
 主项目不需要知道 `production/` 的存在。）preflight 校验自带 roles 齐全。
 
 **父仓库改动（最终只剩 1 处）**：早期方案要改父仓库 4 处（P1–P4）；独立化后 P1/P2/P3（及后续 P5/P6）
-的改动**直接落在 `production/ansible/roles/` 的自带副本里**，父仓库侧已全部还原。
-唯一保留在父仓库的是 P4——pre-push 钩子扫的是整个仓库，白名单只能加在钩子侧：
+的改动**直接落在 `production/ansible/roles/` 的自带副本里**，主项目侧的 5 处已全部还原
+（revert 提交见 `git log`，默认值与还原前一致，Vagrant 流程行为不变）。
+唯一保留在主项目的是 P4——pre-push 钩子扫的是整个仓库，白名单只能加在钩子侧：
 
 | # | 文件 | 改动 | 为什么不能在生产侧绕开 |
 |---|---|---|---|
@@ -580,7 +581,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 | # | 决定 | 理由 |
 |---|---|---|
 | D1 | `production/` **物理独立**：roles/日志库/addons/playbooks 全在本目录，可整体拷走（2026-10-19 修订；早期为引用父仓库 `../ansible/roles`、`../lib/`） | 用户要求"两者物理上不要有任何连接，production 干净到可以当独立项目读" |
-| D2 | 父仓库只留 1 处改动（P4 privacy-check 白名单，见 §5）；P1/P2/P3/P5/P6 落在自带 role 副本里 | 白名单只能在钩子侧；功能改动随副本拷走，无跨目录耦合 |
+| D2 | 主项目只留 1 处改动（P4 privacy-check 白名单，见 §5）；P1/P2/P3/P5/P6 落在自带 role 副本里，主项目侧已 revert | 白名单只能在钩子侧；功能改动随副本拷走，无跨目录耦合 |
 | D3 | 自写薄 playbook，不复用主项目 playbook（roles 用自带副本） | 主项目 playbook 写死 kubeconfig 输出路径与 Vagrant 假设 |
 | D4 | addons 用 `helm` CLI 在首个 server 上跑，不用 `kubernetes.core` | 少依赖，节点网络更可能通内网仓库 |
 | D5 | StorageClass 名用 `localdisk`（自管清单），不用内置 `local-path` | 内置 local-path 的路径只能靠打 ConfigMap 补丁，实测会被 k3s 启动时按 `manifests/local-storage.yaml` 还原 |
@@ -619,8 +620,9 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 ### 18.1 父仓库改动收敛为 1 处（P4）；P1/P2/P3/P5/P6 落入自带 role 副本
 
 `production/` 独立化后（2026-10-19），原先对父仓库 roles 的 5 处改动（P1/P2/P3/P5/P6）**直接改在
-`production/ansible/roles/` 的自带副本里**，主项目的 `ansible/roles/` 已还原为原始状态。
-父仓库唯一保留的改动是 P4：
+`production/ansible/roles/` 的自带副本里**，主项目的 `ansible/roles/` 已用 revert 提交还原
+（Vagrant 流程零引用这些参数，行为不变；disable 列表的条件渲染 `49e486b` 是 Vagrant 自身需要、
+早于 production 工作，予以保留）。父仓库唯一保留的改动是 P4：
 
 | # | 文件 | 改动 | 为什么绕不过 |
 |---|---|---|---|
