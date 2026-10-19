@@ -36,8 +36,13 @@ LOG_DIR="${PROD_DIR}/logs"
 LOG_FILE="${LOG_DIR}/production.log"
 
 CONFIG_FILE="${PROD_DIR}/config/cluster.env"
+# 允许外部覆盖主配置路径（自测 / CI 用；正常运行就是 config/cluster.env）
+if [ -n "${PROD_CONFIG_FILE:-}" ]; then
+  CONFIG_FILE="${PROD_CONFIG_FILE}"
+fi
 CONFIG_LOCAL_FILE="${PROD_DIR}/config/cluster.env.local"
-IPAM_FILE="${PROD_DIR}/config/ipam.yml"
+# 允许调用方预先指定 ipam 文件（自测 / CI 用；正常运行就是 config/ipam.yml）
+IPAM_FILE="${IPAM_FILE:-${PROD_DIR}/config/ipam.yml}"
 
 # =============================================================================
 # 1. 记住调用方显式设置的环境变量（它们优先级最高）
@@ -258,6 +263,13 @@ prod_validate_config() {
   _fail() { log_error "配置错误: $1"; rc=1; }
 
   [ -n "${CLUSTER_NAME}" ] || _fail "CLUSTER_NAME 不能为空（config/cluster.env）"
+  # 空值尤其要拦：默认值是在读文件之前套用的，文件里显式写空会绕过默认值
+  case "${K3S_VERSION}" in
+    '') _fail "K3S_VERSION 不能为空（写 latest 走 stable channel，或写具体版本如 v1.31.4+k3s1）" ;;
+    latest|stable|testing) ;;
+    v[0-9]*.*) ;;
+    *) _fail "K3S_VERSION 格式不对（当前: ${K3S_VERSION}）：应为 latest/stable/testing 或 vMAJOR.MINOR.PATCH[+k3sN]" ;;
+  esac
   case "${K3S_INSTALL_MODE}" in
     online|offline) ;;
     *) _fail "K3S_INSTALL_MODE 只能是 online 或 offline（当前: ${K3S_INSTALL_MODE}）" ;;
