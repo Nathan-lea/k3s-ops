@@ -126,7 +126,7 @@ run_playbook() { # $1=playbook 文件名（playbooks/ 下）; 其余参数原样
     "$@")
   log_mark "执行: ${ref} $*"
   if [ "${DRY_RUN}" = "1" ]; then
-    printf '[dry-run] %q ' "${cmd[@]}"; printf '\n'
+    printf '[dry-run]'; printf ' %q' "${cmd[@]}"; printf '\n'
     return 0
   fi
   "${cmd[@]}" | tee -a "${LOG_FILE}"

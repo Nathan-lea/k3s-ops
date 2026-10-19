@@ -166,16 +166,20 @@ elif servers > 1 and servers % 2 == 0:
     warnings.append('server 数量为偶数（%d）：嵌入式 etcd 建议 1/3/5 台，偶数台不增加容错' % servers)
 
 # 非 server 的第一条（role: server 的先后顺序决定谁是 init 节点）——给出显式提示
+# 注意：这是每次都会出现的常规信息，不是告警，走 INFO 通道
+infos = []
 first_server_idx = next((i for i, n in enumerate(nodes, start=1)
                          if isinstance(n, dict) and n.get('role') == 'server'), None)
 if first_server_idx is not None:
-    warnings.append('集群 init 节点 = nodes[%d]（%s）：这是 ipam.yml 里第一条 role: server'
-                    % (first_server_idx, nodes[first_server_idx - 1].get('hostname')))
+    infos.append('集群 init 节点 = nodes[%d]（%s）：这是 ipam.yml 里第一条 role: server'
+                 % (first_server_idx, nodes[first_server_idx - 1].get('hostname')))
 
 for e in errors:
     print('ERROR:' + e)
 for w in warnings:
     print('WARN:' + w)
+for i in infos:
+    print('INFO:' + i)
 sys.exit(1 if errors else 0)
 PY
 )"
@@ -187,6 +191,7 @@ PY
     case "${line}" in
       ERROR:*) log_error "IPAM: ${line#ERROR:}" ;;
       WARN:*)  log_warn  "IPAM: ${line#WARN:}" ;;
+      INFO:*)  log_info  "IPAM: ${line#INFO:}" ;;
       *)       log_info  "IPAM: ${line}" ;;
     esac
   done <<< "${out}"
