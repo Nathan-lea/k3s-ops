@@ -126,13 +126,14 @@ production/
 │   └── registries.yaml.example   # 内部仓库/离线镜像配置示例
 ├── lib/
 │   ├── config.sh                 # 读 cluster.env + .local + IPAM，导出全局变量
-│   └── ipam.sh                   # 解析 ipam.yml（hostname/ip/role/first server/校验）
+│   ├── ipam.sh                   # 解析 ipam.yml（hostname/ip/role/first server/校验）
+│   └── inventory.sh              # 由 ipam 生成 Ansible inventory 与 extra_vars（唯一写入点）
 ├── ansible/
 │   ├── ansible.cfg               # inventory/roles_path/ssh 默认值
 │   ├── inventory/                # 生成物（gitignore）：hosts.yml、extra_vars.yml
 │   ├── playbooks/
 │   │   ├── 05-preflight.yml      # 节点可达性、基础包、目录
-│   │   ├── 10-os-init.yml        # 服务器初始化（主机名/时区/chrony/swap/内核/limits/ufw/localdisk 目录）
+│   │   ├── 10-os-init.yml        # 服务器初始化（复用 k3s-common + 时区/chrony/limits/hosts/localdisk 目录）
 │   │   ├── 20-k3s-cluster.yml    # 复用 roles：server init/join + agent join + 取 kubeconfig
 │   │   ├── 30-addons.yml         # helm / localdisk / ingress / cert-manager / NFS / Rancher
 │   │   ├── 40-scale-add.yml      # 新节点：os-init + join
@@ -142,20 +143,21 @@ production/
 │       ├── limits-k8s.conf
 │       └── helm-setup.sh            # 在首个 server 上安装/校验 helm（在线下载或本地 artifact）
 ├── addons/
-│   ├── nginx-ingress/values.yaml
-│   ├── localdisk/manifests.yaml.tpl     # 自管 local-path-provisioner（停用 k3s 内置 local-storage）
-│   ├── cert-manager/values.yaml
-│   ├── cert-manager/issuers.yaml.tpl   # 自签 → CA → ClusterIssuer 链
-│   ├── nfs-provisioner/manifests.yaml.tpl  # 自管 nfs-subdir-external-provisioner
-│   ├── in-cluster-nfs/manifests.yaml
-│   ├── rancher/values.yaml
-│   └── rancher/certificate.yaml.tpl
-├── charts/                       # 离线 chart：ingress-nginx / cert-manager / rancher（+ README）
-├── artifacts/                    # 离线二进制/镜像（.gitkeep + README；不进 git）：k3s、helm、images/*.tar
+│   ├── nginx-ingress/values.yaml.j2
+│   ├── localdisk/manifests.yaml.j2      # 自管 local-path-provisioner（停用 k3s 内置 local-storage）
+│   ├── cert-manager/values.yaml.j2
+│   ├── cert-manager/issuers.yaml.j2     # 自签 → CA → ClusterIssuer 链
+│   ├── nfs-provisioner/manifests.yaml.j2  # 自管 nfs-subdir-external-provisioner
+│   ├── in-cluster-nfs/manifests.yaml.j2
+│   ├── rancher/values.yaml.j2
+│   └── rancher/certificate.yaml.j2
+├── charts/                       # 离线 chart（*.tgz 被 .gitignore 排除；用 scripts/fetch-artifacts.sh 拉取）
+├── artifacts/                    # 离线二进制/镜像（gitignore）：k3s、helm、images/*.tar
 ├── scripts/
 │   ├── ssh-setup.sh              # root+密码 → ops 用户+密钥 → 验证 → 按开关加固 root
 │   ├── kubeconfig.sh             # 拉取/改写 → production/kubeconfig
-│   ├── offline-load.sh           # 离线：k3s 二进制 + 镜像 tar 导入
+│   ├── fetch-artifacts.sh        # 在有网的机器上把 k3s/helm/charts 拉到 charts+artifacts（离线准备）
+│   ├── offline-load.sh           # 离线分发：k3s 二进制 + 镜像 tar 导入每个节点
 │   └── verify.sh                 # 装完自检（节点 Ready / 80,443 / SC / PVC / Rancher）
 ├── terraform/
 │   ├── README.md
@@ -386,10 +388,13 @@ bootstrap.sh [--ssh-only|--os-only|--skip-os|--addons-only] [--yes] [--root-pass
 | 基础包 | 生产 playbook | 复用 `k3s-common/vars` 的 `packages` 列表并安装（含 `nfs-common`） |
 | ufw/防火墙 | 见 §12 与 P3 | `USE_UFW` 关时父角色也不再写 ufw 规则（父角色 P3 改动） |
 
-`k3s-common/tasks/main.yml` 目前**无条件** include `firewall.yml`。为不改父角色行为，
-生产侧不直接 include `k3s-common` 的 `main.yml`，而是在 `10-os-init.yml` 里按需要 `include_tasks`
-父角色的 `containerd.yml` / `firewall.yml`，并自己实现低风险项。
-> 这是我做的取舍：宁可多写十几行 playbook，也不为生产需求改父角色的默认行为。
+`10-os-init.yml` **直接复用 `k3s-common` 角色**（`roles: [k3s-common]`），拿到 swap / 内核模块 / sysctl /
+`registries.yaml` / 防火墙（受 `use_ufw` 门控，见 P3）全部能力；随后在同一 playbook 里追加
+主机名、`/etc/hosts`、时区 + chrony、limits、基础包、`LOCALDISK_PATH` 目录这些父角色没有的项。
+
+> 权衡说明：父角色 `main.yml` 原本**无条件** include `firewall.yml`，`USE_UFW=false` 就失效。
+> 与其在生产侧绕开父角色、把 swap/内核/sysctl 抄一遍（会有两处需要同步维护的真相），
+> 不如加 P3 那一行 `when: use_ufw | default(true)`——默认值不动，现有行为完全不变，且生产侧保持"整段复用"。
 
 ufw 说明（约束 15）：`USE_UFW=false` 时**整段跳过**，不安装也不改 ufw；`true` 时放行
 `6443/10250/8472/2379/2380` + `SSH_PORT` + `UFW_ALLOW_CIDR` 内的常用端口（80/443 必须放行，因为 ingress 用宿主机端口）。
@@ -512,8 +517,9 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 - `K3S_INSTALL_MODE=offline`：要求 `artifacts/k3s` 存在（版本自定并写入 `extra_vars.yml`），
   由 `scripts/offline-load.sh` 分发；`artifacts/images/*.tar` 用 `k3s ctr images import` 导入每个节点。
 - `CHARTS_MODE=local`：`charts/*.tgz`，只需 **3 个** chart：
-  `ingress-nginx-4.11.0.tgz`、`cert-manager-v1.20.2.tgz`（仓库根已有，已复制）、
-  `rancher-2.15.2.tgz`（已从 `releases.rancher.com` 拉取成功）。
+  `ingress-nginx-4.11.0.tgz`、`cert-manager-v1.20.2.tgz`、`rancher-2.15.2.tgz`。
+  ⚠️ 父仓库 `.gitignore` 里已有 `*.tgz`（"体积大，不入库"），所以 chart 包**不会随 git 走**：
+  交付时用 `scripts/fetch-artifacts.sh` 在有网的机器上把它们拉到 `production/charts/`。
   `CHARTS_MODE=repo`：`helm repo add` + `update`（需要网络或内网 ChartMuseum/Artifactory）。
 - **不需要 chart 的组件**：`localdisk` 与 NFS provisioner 走自管清单（见 §12 第 1、4 项），
   因此离线时只需解决镜像（`LOCALDISK_IMAGE`、`NFS_PROVISIONER_IMAGE`）。
@@ -540,6 +546,22 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 
 证据落盘：`production/logs/`、`production/.state/`、以及 `docs/superpowers/specs/` 下的运行记录（如执行则补）。
 
+**本轮实际结果（2026-10-19 静态校验）**：
+
+| 证据 | 命令 | 结果 |
+|---|---|---|
+| shell 语法 | `bash -n` 12 个脚本 | ✅ 全通过 |
+| shellcheck | `shellcheck -S warning` | ✅ 无 error；遗留 SC2034 属跨文件引用（`config.sh` 是被 source 的变量库），非缺陷 |
+| playbook 语法 | `ansible-playbook --syntax-check` 6 个 | ✅ 全通过 |
+| host pattern | `ansible-playbook --list-hosts` | ✅ `first_server` 命中 1 台、`remove_target` 命中指定节点 |
+| IPAM 正例 | 默认 `ipam.yml` | ✅ 通过 |
+| IPAM 反例 ×9 | 0 台 server / IP 重复 / hostname 重复 / 非法角色 / 非法 IP / 网段外 / 等于网关 / 空 nodes | ✅ 全部按预期拒绝（短名 hostname 仅告警，符合设计） |
+| 配置正例 ×5 | 默认 / NFS 真实 server / `USE_UFW=false` / 关 Rancher / 关 ingress | ✅ 全部通过 |
+| 配置反例 ×9 | NFS 占位 / `IN_CLUSTER_NFS` 未启用 NFS / `NFS_DEFAULT_SC` 未启用 NFS / 双默认 SC / `SSH_PORT` 越界·非数字 / 空 `CLUSTER_NAME` / 非法 `RANCHER_TLS_SOURCE` / 空 bootstrap 密码 / 空 `K3S_VERSION` | ✅ 全部按预期拒绝 |
+| bootstrap 冒烟 | `--dry-run --steps 05,ssh,10` | ✅ 版本解析 + inventory 生成 + 命令打印正常 |
+| 重复内容扫描 | 连续重复行 / 同一 5 行块 ×3 | ✅ 无 |
+| 隐私 | `bash scripts/privacy-check.sh` | ✅ 通过（169 个文件） |
+
 ---
 
 ## 16. 我做的决定（builder 需知，用户可推翻）
@@ -554,7 +576,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 | D6 | Rancher 走 Ingress + cert-manager 内网证书，不用 NodePort | 约束 4「不保留 NodePort」+ 问答 23 |
 | D7 | SSH 加固用 `sshd_config.d/99-*.conf` 片段，默认 `prohibit-password` | 可回滚、不破坏发行版主配置 |
 | D8 | 步骤 2 验证不通过就**不动** `sshd_config` | 用户约束 14 的硬要求：密钥生效再禁 root |
-| D9 | 生产侧不 include 父角色 `main.yml`，按需 include 子任务 | 不改父角色默认行为（ufw 开关）；但 `k3s-server`/`k3s-agent` 内部仍会 include，所以仍需要 P3 |
+| D9 | `10-os-init.yml` **直接复用 `k3s-common` 角色**，不绕开它 | 绕开会把 swap/内核/sysctl 抄成第二份真相；P3 让 `use_ufw` 生效即可 |
 | D10 | `K3S_VERSION=latest` 在 preflight 解析成具体版本 | 幂等/可复现；离线模式用 artifact 版本 |
 | D11 | `ipam.yml` 校验只做最小集 | 不做 IPAM 分配器，避免越权猜测 |
 | D12 | `privacy-check.sh` 白名单按**精确文件名/IP**扩充（非通配），并保留对其它 `.env`、其它内网 IP 的拦截 | 否则钩子会拦推送；精确匹配保证检查仍然有效 |
@@ -576,3 +598,74 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 | A4 | 集群内 NFS 镜像 | **内网无该镜像** | `IN_CLUSTER_NFS=true` 分支降级为**文档说明 + 不默认启用**；`manifests.yaml` 保留但标注"需先解决镜像来源" |
 | A5 | Rancher 证书 | **先走 Rancher 自签**，保留更换接口 | `RANCHER_TLS_SOURCE=rancher` 为默认；`cert-manager` 分支代码路径保留，切一个变量即可 |
 | A6 | 与 `k3s-ops.sh` 关系 | **并存且相互独立** | `production/` 不修改 `k3s-ops.sh`、不读写 `vagrant/`；两者只共享 `ansible/roles` 与 `lib/` |
+
+---
+
+## 18. 实现同步（写码过程中与方案的差异，以本节为准）
+
+方案是"想"，这一节是"做"。以下条目与前文冲突时，以本节为准。
+
+### 18.1 父仓库改动：从 4 处扩到 6 处（修正 D2）
+
+| # | 文件 | 改动 | 为什么绕不过 |
+|---|---|---|---|
+| P1 | `ansible/roles/k3s-server/templates/config.yaml.j2` | `flannel-backend` 参数化（`k3s_config.flannel_backend \| default('vxlan')`） | 约束 11：CNI 默认 Flannel、可配 |
+| P2 | 同上 | `disable:` 列表按 `k3s_config.disable_local_storage` 追加 `local-storage` | D5/A2：自管 localdisk 时必须关掉内置的，否则两个 provisioner 抢同一个 PV 名 |
+| P3 | `ansible/roles/k3s-common/tasks/main.yml` | `firewall.yml` 外面套 `when: use_ufw \| default(true)` | 约束 15：`USE_UFW=false` 必须真的不碰防火墙；`default(true)` 保住老用法 |
+| P4 | `scripts/privacy-check.sh` | 精确文件名豁免 `production/config/cluster.env{,.local.example}`、`production/scripts/kubeconfig.sh`；`ALLOW_IPS` 加 `192.168.100.*`；`ALLOW_PASS_VALUES` 加 `ChangeMe`；`ALLOW_PATH_PATTERNS` 加 `/data/k8s-local-path` | 否则 pre-push 钩子拦住本项目自己的文件（D12） |
+| P5 | `ansible/roles/k3s-common/templates/registries.yaml.j2` | 渲染可选 `configs.<host>.auth`（来源 `containerd_registry_credentials`，默认 `auth: {}`） | 约束 9：Artifactory 私有仓库需要 basic auth，否则 k3s 拉镜像 401 |
+| P6 | `ansible/roles/{k3s-server,k3s-agent}/tasks/install.yml` | `get_url` 套 `when: not (k3s_skip_download \| default(false))` | 约束 9：离线部署时二进制由 `offline-load.sh` 预置，不能再让 `get_url` 去联网 |
+
+P5/P6 的变量都带 `default()`，父仓库老 playbook 行为不变。
+
+### 18.2 `hosts:` 不做模板展开 → inventory 里落真实 group
+
+`hosts: "{{ first_server_host }}"` 在本机 Ansible 版本下**解析失败**（`--syntax-check` 和 `--list-hosts` 都报
+`Error processing keyword 'hosts': ... is undefined`）。host pattern 的展开早于 task 期的模板渲染，
+inventory vars 和 `-e` extra vars 都救不了。
+
+做法：`lib/inventory.sh` 直接落两个**真实 group**，playbook 用裸 group 名：
+
+- `first_server` —— 含 ipam.yml 里第一条 `role: server` 的节点；playbook 20/30/50 用 `hosts: first_server`
+- `remove_target` —— **始终存在**（无目标时 `hosts: {}`），避免 pattern 不存在时报错；
+  由 `scale.sh remove` 在生成 inventory 前 `export PROD_REMOVE_TARGET=<节点>` 填充；
+  playbook 50 的目标 play 用 `hosts: remove_target`
+
+`first_server_host` 仍保留在 `all.vars` 里，供 task 内的 `delegate_to:` 等场景使用（task 期模板是好的）。
+
+### 18.3 存储默认值：NFS 默认关闭
+
+`STORAGE_NFS_ENABLED` 默认 `false`。否则开箱就是占位的 `NFS_SERVER`，preflight 硬拦，
+"一条命令"第一行就失败。要启用：填真实 `NFS_SERVER` 再改回 `true`（或 `IN_CLUSTER_NFS=true`）。
+
+配套加了两条互斥校验（都在 `config.sh`）：
+
+- `NFS_DEFAULT_SC=true` 但 `STORAGE_NFS_ENABLED=false` → 报错（没有 nfs-client SC 可当默认）
+- `IN_CLUSTER_NFS=true` 但 `STORAGE_NFS_ENABLED=false` → 报错（集群内 NFS 就是给 nfs-client 用的）
+
+### 18.4 端口与证书的两处事实修正
+
+- **`INIT_SSH_PORT` vs `SSH_PORT`**：初始 root 首连端口与之后 ops 端口分开。hardening 在改端口后会
+  **回连新端口确认可用**才收紧 root（约束 14 的"密钥必须先能用"扩展到端口变更场景）。
+- **`RANCHER_TLS_SOURCE` 的合法值只有 `rancher | letsEncrypt | secret`**（读 `rancher-2.15.2.tgz` 的
+  `values.schema.json` 确认）。chart 里**没有** cert-manager 子 chart，所以：
+  - `secret` 模式必须自己先放好 Secret，cert-manager 可以不开
+  - `letsEncrypt` / `rancher` 模式都需要 cert-manager **先于** rancher 装好 —— 流水线顺序已保证（30 号 playbook 内先 cert-manager 再 rancher）
+  - 默认 `rancher`（自签名），与 A5 一致
+
+### 18.5 其它落地细节（方案里没写细的）
+
+- **k3s stable 版本解析**：channel endpoint 返回的是 HTML body（不是 302），所以 `prod_resolve_k3s_version`
+  先试 `%{redirect_url}`，失败再从 body 里 grep `v<semver>+k3s<n>`。
+- **`charts/*.tgz` 不进 git**（根 `.gitignore` 有 `*.tgz`），由 `scripts/fetch-artifacts.sh` 拉取；
+  `charts/README.md` 说明要哪几个、放哪。
+- **节点 label**：`lib/inventory.sh` 把 `ipam.yml` 的 `labels` 预先拼成 `prod_node_labels`，
+  `30-addons.yml` 用 `kubectl label node --overwrite` 应用 —— 扩容后重跑 30 号即可，不用手工。
+- **`scale.sh apply` 跑完整流水线**（ssh → 05 → 10 → 20 → 30），新加节点和 bootstrap 走同一条路；
+  已存在节点上每一步都是幂等的，不会被反复改。
+- **缩容清 etcd member**：k3s 没有 `etcdctl` 子命令，在**剩余**的 server 上用 `/usr/bin/etcdctl`
+  （k3s 依赖里自带）执行 `member remove`；找不到就大声警告让用户手工处理，不额外装 `etcd-client` 包。
+- **playbook 20 的版本错位**：发现节点上 `/usr/local/bin/k3s` 版本不对时，只有在**集群尚未初始化**
+  （etcd 数据目录不存在）时才删掉重装；已初始化的集群只警告，不半升级。
+- **`production/` 的示例网段固定用 `192.168.100.0/24`**，已加进 `privacy-check.sh` 的 `ALLOW_IPS`
+  （与 Vagrant 用的 `192.168.56.0/24` 区分开）。
