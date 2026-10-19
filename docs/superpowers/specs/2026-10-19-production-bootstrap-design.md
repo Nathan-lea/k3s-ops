@@ -143,14 +143,14 @@ production/
 │       └── helm-setup.sh            # 在首个 server 上安装/校验 helm（在线下载或本地 artifact）
 ├── addons/
 │   ├── nginx-ingress/values.yaml
-│   ├── local-path/values.yaml
+│   ├── localdisk/manifests.yaml.tpl     # 自管 local-path-provisioner（停用 k3s 内置 local-storage）
 │   ├── cert-manager/values.yaml
 │   ├── cert-manager/issuers.yaml.tpl   # 自签 → CA → ClusterIssuer 链
-│   ├── nfs-subdir-external-provisioner/values.yaml
+│   ├── nfs-provisioner/manifests.yaml.tpl  # 自管 nfs-subdir-external-provisioner
 │   ├── in-cluster-nfs/manifests.yaml
 │   ├── rancher/values.yaml
 │   └── rancher/certificate.yaml.tpl
-├── charts/                       # 离线 chart 目录（.gitkeep + README 列出需要的 tgz）
+├── charts/                       # 离线 chart：ingress-nginx / cert-manager / rancher（+ README）
 ├── artifacts/                    # 离线二进制/镜像（.gitkeep + README；不进 git）：k3s、helm、images/*.tar
 ├── scripts/
 │   ├── ssh-setup.sh              # root+密码 → ops 用户+密钥 → 验证 → 按开关加固 root
@@ -248,6 +248,7 @@ LOCALDISK_ENABLED=true                  # true→停用 k3s 内置 local-storage
 LOCALDISK_SC_NAME=localdisk             # StorageClass 名（用户口径：localdisk）
 LOCALDISK_DEFAULT_SC=true
 LOCALDISK_RECLAIM_POLICY=Retain         # Retain | Delete（本地盘建议 Retain，防误删数据）
+LOCALDISK_IMAGE=rancher/local-path-provisioner:v0.0.30
 STORAGE_NFS_ENABLED=true
 IN_CLUSTER_NFS=false                    # 约束 18
 NFS_SERVER=nfs-server.example.com
@@ -256,6 +257,7 @@ NFS_VERSION=4
 NFS_SC_NAME=nfs-client
 NFS_DEFAULT_SC=false                    # 与 LOCALDISK_DEFAULT_SC 互斥（都为 true 时 preflight 报错）
 NFS_RECLAIM_POLICY=Delete
+NFS_PROVISIONER_IMAGE=registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
 
 # ---- Helm（addons 阶段在首个 server 上执行）----
 HELM_VERSION=v3.16.3
@@ -276,10 +278,10 @@ CERT_MANAGER_CHART_VERSION=v1.20.2
 ACME_EMAIL=                             # 留空则只用内网 CA，不建 Let's Encrypt issuer
 RANCHER_ENABLED=true
 RANCHER_HOSTNAME=rancher.${CLUSTER_DOMAIN}
-RANCHER_CHART_VERSION=2.9.3
+RANCHER_CHART_VERSION=2.15.2
 RANCHER_REPLICAS=1
 RANCHER_BOOTSTRAP_PASSWORD=admin        # 演示值；生产改 .local
-RANCHER_TLS_SOURCE=cert-manager         # cert-manager | rancher
+RANCHER_TLS_SOURCE=rancher              # rancher | cert-manager（默认自签；切换即可换成内网 CA）
 
 # ---- 制品 / 仓库 ----
 CHARTS_MODE=local                       # local=用 production/charts/*.tgz；repo=用 Helm 仓库
@@ -428,18 +430,19 @@ ufw 说明（约束 15）：`USE_UFW=false` 时**整段跳过**，不安装也�
    > 父仓库把 helm 当**控制端**工具（`~/.local/bin/helm`），k3s 的 `install.yml` 只装 `k3s`/`kubectl`。
    > 目标是"一条命令"，所以 helm 由 bootstrap 自己解决，而不是要求用户预装。
 1. **localdisk（本地盘）**：**停用 k3s 内置 local-storage**（`k3s_config.disable_local_storage=true`），
-   改为自管 `local-path-provisioner` chart（`addons/local-path/values.yaml`）：
-   `storageClass.name=LOCALDISK_SC_NAME`（默认 `localdisk`）、`defaultClass=LOCALDISK_DEFAULT_SC`、
+   改为**自管清单** `addons/localdisk/manifests.yaml.tpl`（SA + RBAC + ConfigMap + Deployment + StorageClass）：
+   `storageClass.name=LOCALDISK_SC_NAME`（默认 `localdisk`）、默认类注解由 `LOCALDISK_DEFAULT_SC` 控制、
    `reclaimPolicy=LOCALDISK_RECLAIM_POLICY`、`configmap.config.nodePathMap[0].paths=[LOCALDISK_PATH]`、
-   `setup` 用 `mkdir -m 0777 -p "$VOL_DIR"`。`LOCALDISK_PATH` 目录已在第 10 步于所有节点创建。
+   `setup` 用 `mkdir -m 0777 -p "$VOL_DIR"`；镜像 `LOCALDISK_IMAGE`（默认
+   `rancher/local-path-provisioner:v0.0.30`）。`LOCALDISK_PATH` 目录已在第 10 步于所有节点创建。
+   > **原本想用 Helm chart**，但 `charts.rancher.io` 已不再收录 `local-path-provisioner`，官方 chart 只存在于
+   > GitHub 仓库内（本机 GitHub releases 不可达）。自管清单反而更省事：**零额外 chart**、完全离线友好、
+   > 且我们要改的三个点（SC 名、路径、回收策略）本来就是"改模板"最直接。
+   >
    > **为什么不直接改 k3s 的 `local-path-config` ConfigMap**：已在本集群实测，k3s 把内置组件写成
    > 磁盘上的 `/var/lib/rancher/k3s/server/manifests/local-storage.yaml`，manifest 控制器每次启动都会
    > 按该文件重新 apply。只 patch ConfigMap 会在 k3s 重启/升级后被**悄悄还原**，PVC 数据落回
    > `/var/lib/rancher/k3s/storage`——属于"数据落到错误磁盘"的隐蔽故障。
-   > 自管 provisioner 换来的代价只是多一个 chart（离线需补一个 tarball），但换到的名字 `localdisk`
-   > 正好和用户口径一致，且升级安全。
-   > 若用户坚持"零额外 chart"，退路是改为编辑各 server 上的 `manifests/local-storage.yaml`（同样落盘生效，
-   > 但 k3s 升级可能覆写，需要在升级后重跑 `--addons-only`）。
 2. **nginx-ingress**：`kind: DaemonSet`、`hostNetwork: true`、`dnsPolicy: ClusterFirstWithHostNet`、
    `service.enabled: false`（**无 NodePort**）、`reportNodeInternalIp`、
    `updateStrategy: RollingUpdate(maxUnavailable: 1)`、`INGRESS_NODE_SELECTOR` 可限范围（约束 4/16/23）。
@@ -448,22 +451,28 @@ ufw 说明（约束 15）：`USE_UFW=false` 时**整段跳过**，不安装也�
    随后 apply 签发链：`ClusterIssuer/selfsigned-bootstrap`（selfsigned）→
    `Certificate/internal-ca`（ns `cert-manager`）→ `ClusterIssuer/internal-ca`（ca，`ca.secretName=internal-ca`）。
    `ACME_EMAIL` 非空时追加 `ClusterIssuer/letsencrypt`（DNS-01 未配置则只建 HTTP-01，文档注明）。
-4. **NFS**（约束 6/18）：`nfs-subdir-external-provisioner` with
-   `nfs.server`/`nfs.path`/`nfs.mountOptions=[nfsvers=NFS_VERSION]`/`storageClass.name=NFS_SC_NAME`
-   （默认 `nfs-client`）/`storageClass.reclaimPolicy=NFS_RECLAIM_POLICY`。
-   - `IN_CLUSTER_NFS=false`：直接用外部 NFS（`NFS_SERVER`/`NFS_PATH`/`NFS_VERSION`）。
+4. **NFS**（约束 6/18）：**自管清单** `addons/nfs-provisioner/manifests.yaml.tpl`
+   （SA + RBAC + Deployment + StorageClass），镜像 `NFS_PROVISIONER_IMAGE`
+   （默认 `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2`），
+   `NFS_SERVER`/`NFS_PATH`/`mountOptions=[nfsvers=NFS_VERSION]`/`storageClass.name=NFS_SC_NAME`
+   （默认 `nfs-client`）/`reclaimPolicy=NFS_RECLAIM_POLICY`。
+   > 上游 chart（`kubernetes-sigs/nfs-subdir-external-provisioner`）只在 GitHub releases 分发，
+   > 本机 **GitHub 不可达**（下载中断），故与 localdisk 一致改为自管清单，零 chart 依赖。
+   - `IN_CLUSTER_NFS=false`（**默认**）：直接用外部 NFS（`NFS_SERVER`/`NFS_PATH`/`NFS_VERSION`）。
    - `IN_CLUSTER_NFS=true`：先在 ns `nfs-system` 部署简易 NFS Server
      （Deployment + Service `nfs-server`，导出卷用 `localdisk` PVC 落在 `LOCALDISK_PATH`），
-     再把 provisioner 指向 `nfs-server.nfs-system.svc.cluster.local`；镜像来源须在 `charts/README.md`
-     与离线制品中说明（**单副本 = 单点**，文档明示）。
+     再把 provisioner 指向 `nfs-server.nfs-system.svc.cluster.local`。
+     ⚠️ **内网无 NFS Server 镜像（答复 A4）**，因此该分支默认关闭且**未验证**；`manifests.yaml` 与
+     镜像清单保留在仓库，等你解决镜像来源后再启用。文档明确写"单副本 = 单点"。
    - 默认 SC 归属：`LOCALDISK_DEFAULT_SC` 与 `NFS_DEFAULT_SC` 互斥（preflight 报错）。
-     选 NFS 作默认时，chart 侧给 `nfs-client` 打
-     `storageclass.kubernetes.io/is-default-class=true`，并确保 `localdisk` 上没有该注解。
-5. **Rancher**（问答 22）：`RANCHER_TLS_SOURCE=cert-manager` 时先 apply `Certificate/rancher-tls`
-   （`dnsNames=[RANCHER_HOSTNAME]`，issuer `internal-ca`）并等待 Ready，再
-   `helm upgrade --install rancher`（`ingress.enabled=true`、`ingressClassName=nginx`、
-   `tls.source=secret`、`tls.secretName=rancher-tls`、注解 `proxy-body-size: 100m`）。
-   `RANCHER_TLS_SOURCE=rancher` 时交给 Rancher 自签。`replicas=RANCHER_REPLICAS`（默认 1，文档标注 SPOF）。
+     选 NFS 作默认时，清单渲染把 `is-default-class=true` 给 `nfs-client`，并确保 `localdisk` 上没有该注解。
+5. **Rancher**（问答 22，答复 A5）：默认 `RANCHER_TLS_SOURCE=rancher`——交给 Rancher 自签（按 `RANCHER_HOSTNAME` 生成），
+   最少依赖、离线可用。`helm upgrade --install rancher`：`ingress.enabled=true`、`ingressClassName=nginx`、
+   `tls.source=rancher`、注解 `nginx.ingress.kubernetes.io/proxy-body-size: 100m`。
+   切 `RANCHER_TLS_SOURCE=cert-manager` 时改走内网 CA：先 apply `Certificate/rancher-tls`
+   （`dnsNames=[RANCHER_HOSTNAME]`，issuer `internal-ca`）并等 Ready，再以
+   `tls.source=secret`、`tls.secretName=rancher-tls` 安装。两条路径由同一变量切换，代码路径都保留。
+   `replicas=RANCHER_REPLICAS`（默认 1，文档标注 SPOF）。
 6. **metrics-server**：k3s 自带且默认启用，**不做任何事**（确保 `disable` 列表里没有它）。
 
 访问模型（约束 4/23）：DNS 把 `RANCHER_HOSTNAME` 指向**任意**节点 IP（或全部）；80/443 由每节点的
@@ -502,10 +511,12 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 - `K3S_INSTALL_MODE=online`：下载 k3s 二进制（`K3S_DOWNLOAD_URL` 可指向内网镜像）。
 - `K3S_INSTALL_MODE=offline`：要求 `artifacts/k3s` 存在（版本自定并写入 `extra_vars.yml`），
   由 `scripts/offline-load.sh` 分发；`artifacts/images/*.tar` 用 `k3s ctr images import` 导入每个节点。
-- `CHARTS_MODE=local`：`charts/*.tgz`。需要的 5 个 chart：
-  `ingress-nginx`（仓库根已有 `ingress-nginx-4.11.0.tgz`）、`cert-manager`（仓库根已有 `cert-manager-v1.20.2.tgz`）、
-  `local-path-provisioner`、`nfs-subdir-external-provisioner`、`rancher`；后三个需按 `charts/README.md` 补齐。
+- `CHARTS_MODE=local`：`charts/*.tgz`，只需 **3 个** chart：
+  `ingress-nginx-4.11.0.tgz`、`cert-manager-v1.20.2.tgz`（仓库根已有，已复制）、
+  `rancher-2.15.2.tgz`（已从 `releases.rancher.com` 拉取成功）。
   `CHARTS_MODE=repo`：`helm repo add` + `update`（需要网络或内网 ChartMuseum/Artifactory）。
+- **不需要 chart 的组件**：`localdisk` 与 NFS provisioner 走自管清单（见 §12 第 1、4 项），
+  因此离线时只需解决镜像（`LOCALDISK_IMAGE`、`NFS_PROVISIONER_IMAGE`）。
 - `registries.yaml`：由 `containerd_mirrors` + `REGISTRY_ENDPOINT` 生成；
   Artifactory 凭据只从 `cluster.env.local`/环境变量取，**不进 git**。
 
@@ -513,18 +524,19 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 
 ## 15. 验证与证据（约束 + 诚实边界）
 
-**能自动化的**：
+**本轮的验证边界（答复 A1：不真机验证）**：没有 3 台真机，**不声称端到端可用**。本轮只交付静态证据：
 
-- `lib/ipam.sh` / `lib/config.sh`：`bash -n` + 单元式自测（构造正反例 ipam）。
-- playbook：`ansible-playbook --syntax-check`（全部 6 个）。
-- 脚本：`shellcheck`（`bootstrap.sh`/`scale.sh`/`scripts/*.sh`）。
-- 隐私：`bash scripts/privacy-check.sh`（并同步维护 `ALLOW_*`：`192.168.100.x`、`nfs-server.example.com`、
-  `k8s.example.com` 等示例值与白名单一致）。
-- 文档：`README.md` 与本文流程图一致。
+| 证据 | 命令 | 本轮要求 |
+|---|---|---|
+| shell 语法 | `bash -n` / `shellcheck` | 全部脚本通过 |
+| playbook 语法 | `ansible-playbook --syntax-check` | 6 个 playbook 全部通过 |
+| IPAM/配置逻辑 | `lib/ipam.sh` / `lib/config.sh` 自测（正例 + 反例：无 server、IP 重复、缺字段、最后一台 server） | 全部按预期通过/报错 |
+| 隐私 | `bash scripts/privacy-check.sh` | 通过（按 P4/D12 扩白名单后） |
+| 一致性 | README ↔ 脚本 ↔ 配置文件三方交叉核对 | 无悬空引用 |
 
-**本轮无法证明的（须用户决定）**：没有真实 3 台节点，无法跑通端到端。
-候选验证路径（见第 17 节问题 Q1）：用现有 Vagrant 的 VM 当"已装好的服务器"跑一次全流程（会改动现有环境），
-或只做静态校验后交付。
+**明确留白（在 README 中显著标注）**：`bootstrap.sh` 端到端、hostNetwork ingress 实际占 80/443、
+两种 StorageClass 实际出 PVC、Rancher 登录 —— 均**未在真机验证**，首次真机运行请按 README 的
+"首次运行检查清单"逐项确认。
 
 证据落盘：`production/logs/`、`production/.state/`、以及 `docs/superpowers/specs/` 下的运行记录（如执行则补）。
 
@@ -538,7 +550,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 | D2 | 父仓库只做 4 处**向后兼容**改动（P1–P4，见 §5），默认行为不变 | CNI 可配置、localdisk 可配路径、ufw 可关、`cluster.env` 文件名是硬需求；四处都绕不过去 |
 | D3 | 自写薄 playbook，不复用父仓库的 playbook（roles 复用） | 父 playbook 写死 kubeconfig 输出路径与 Vagrant 假设 |
 | D4 | addons 用 `helm` CLI 在首个 server 上跑，不用 `kubernetes.core` | 少依赖，节点网络更可能通内网仓库 |
-| D5 | StorageClass 名用 `localdisk`（自管 provisioner），不用内置 `local-path` | 内置 local-path 的路径只能靠打 ConfigMap 补丁，实测会被 k3s 启动时按 `manifests/local-storage.yaml` 还原 |
+| D5 | StorageClass 名用 `localdisk`（自管清单），不用内置 `local-path` | 内置 local-path 的路径只能靠打 ConfigMap 补丁，实测会被 k3s 启动时按 `manifests/local-storage.yaml` 还原 |
 | D6 | Rancher 走 Ingress + cert-manager 内网证书，不用 NodePort | 约束 4「不保留 NodePort」+ 问答 23 |
 | D7 | SSH 加固用 `sshd_config.d/99-*.conf` 片段，默认 `prohibit-password` | 可回滚、不破坏发行版主配置 |
 | D8 | 步骤 2 验证不通过就**不动** `sshd_config` | 用户约束 14 的硬要求：密钥生效再禁 root |
@@ -554,19 +566,13 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 
 ---
 
-## 17. 待用户确认的问题
+## 17. 已确认的答复（2026-10-19）
 
-- **Q1**：本轮要不要**真机验证**？可选：(a) 用现有 Vagrant 的 2 台 VM 当"已装好的服务器"跑一遍
-  `bootstrap.sh`（会重装现有 k3s，需你的许可，且只有 1 server 不够 HA 但足够验证流程）；
-  (b) 只做静态校验（syntax-check + shellcheck + 自测），交付后再由你在真机跑。
-- **Q2**：`production/` 与现有 `k3s-ops.sh` 的关系——**并存**（`k3s-ops.sh` 只管 Vagrant 教学环境，
-  `production/*.sh` 独立）对吗？
-- **Q3**：Rancher 的证书，确认用**内网 CA（cert-manager selfsigned→CA）**，而不是 Rancher 自签
-  （`RANCHER_TLS_SOURCE=rancher`）？
-- **Q4**：`charts/` 里的 `local-path-provisioner`、`nfs-subdir-external-provisioner`、`rancher` 三个离线
-  tarball，是你提供还是我尝试下载？（本机网络是否可达 Helm 仓库 / Artifactory？）
-- **Q5**：`IN_CLUSTER_NFS=true` 时的 NFS Server 镜像（如 `itsthenetwork/nfs-server-alpine`），
-  内网仓库里是否已有？没有的话这个分支是否降级为"文档说明 + 不默认启用"？
-- **Q6**：本地盘 storage 的路线选哪条——(a) 自管 `local-path-provisioner` chart，SC 名 `localdisk`，升级安全，
-  但多一个离线 chart；（b）编辑各 server 的 `manifests/local-storage.yaml`，零额外 chart，但 k3s 升级可能覆写。
-  默认取 (a)。
+| # | 问题 | 用户答复 | 对方案的影响 |
+|---|---|---|---|
+| A1 | 是否真机验证 | **本轮不真机验证** | 交付证据降级为静态校验：`--syntax-check`、`shellcheck`、ipam/config 正反例自测；端到端由用户在真机跑。§15 按此调整 |
+| A2 | 本地盘路线 | **选 (a)**：自管 `local-path-provisioner`，SC 名 `localdisk` | §12 第 1 项与 D5 按 (a) 实现；离线需 `local-path-provisioner` tarball |
+| A3 | 离线 chart 来源 | **由我尝试下载**；当前**无本地 Helm 仓、无 Artifactory** | 结果：`rancher-2.15.2.tgz` 拉取成功；`nfs-subdir-external-provisioner` 的 tarball 只能从 **GitHub releases** 取，本机不可达 → 该组件与 `localdisk` 一并改为**自管清单**（零 chart）。最终 `CHARTS_MODE=local` 只需 3 个 chart |
+| A4 | 集群内 NFS 镜像 | **内网无该镜像** | `IN_CLUSTER_NFS=true` 分支降级为**文档说明 + 不默认启用**；`manifests.yaml` 保留但标注"需先解决镜像来源" |
+| A5 | Rancher 证书 | **先走 Rancher 自签**，保留更换接口 | `RANCHER_TLS_SOURCE=rancher` 为默认；`cert-manager` 分支代码路径保留，切一个变量即可 |
+| A6 | 与 `k3s-ops.sh` 关系 | **并存且相互独立** | `production/` 不修改 `k3s-ops.sh`、不读写 `vagrant/`；两者只共享 `ansible/roles` 与 `lib/` |
