@@ -102,6 +102,16 @@ SSH_PORT=2222 INIT_SSH_USER=root INIT_SSH_PASSWORD=xxx ./production/bootstrap.sh
 | kubeconfig | `scripts/kubeconfig.sh` | 从首个 server 拉 kubeconfig，`server:` 字段改成真实 IP，写到 `production/kubeconfig` |
 | verify | `scripts/verify.sh` | **自检**：节点 Ready？组件就绪？StorageClass 有？80/443 在听？打印访问入口 |
 
+另外有一个不依赖机器、随时可跑的**逻辑自测**：
+
+```bash
+./production/scripts/selftest.sh          # 全跑（ipam + config 正反例，共 45 条）
+./production/scripts/selftest.sh ipam     # 只跑 IPAM 校验
+./production/scripts/selftest.sh config   # 只跑 cluster.env 校验
+```
+
+改了 `lib/ipam.sh` 或 `lib/config.sh` 之后跑一遍，就知道有没有把某条校验改坏。它只在临时目录里改配置副本，不碰真实配置、不碰任何节点。
+
 扩缩容（`scale.sh`）额外用到：
 
 | 命令 | 文件 | 做什么 |

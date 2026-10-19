@@ -536,7 +536,7 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 |---|---|---|
 | shell 语法 | `bash -n` / `shellcheck` | 全部脚本通过 |
 | playbook 语法 | `ansible-playbook --syntax-check` | 6 个 playbook 全部通过 |
-| IPAM/配置逻辑 | `lib/ipam.sh` / `lib/config.sh` 自测（正例 + 反例：无 server、IP 重复、缺字段、最后一台 server） | 全部按预期通过/报错 |
+| IPAM/配置逻辑 | `production/scripts/selftest.sh`（45 条正反例，改库后可重跑） | 全部按预期通过/报错 |
 | 隐私 | `bash scripts/privacy-check.sh` | 通过（按 P4/D12 扩白名单后） |
 | 一致性 | README ↔ 脚本 ↔ 配置文件三方交叉核对 | 无悬空引用 |
 
@@ -554,10 +554,12 @@ scale.sh list                  # 列出 ipam 与集群实际节点差异
 | shellcheck | `shellcheck -S warning` | ✅ 无 error；遗留 SC2034 属跨文件引用（`config.sh` 是被 source 的变量库），非缺陷 |
 | playbook 语法 | `ansible-playbook --syntax-check` 6 个 | ✅ 全通过 |
 | host pattern | `ansible-playbook --list-hosts` | ✅ `first_server` 命中 1 台、`remove_target` 命中指定节点 |
-| IPAM 正例 | 默认 `ipam.yml` | ✅ 通过 |
-| IPAM 反例 ×9 | 0 台 server / IP 重复 / hostname 重复 / 非法角色 / 非法 IP / 网段外 / 等于网关 / 空 nodes | ✅ 全部按预期拒绝（短名 hostname 仅告警，符合设计） |
-| 配置正例 ×5 | 默认 / NFS 真实 server / `USE_UFW=false` / 关 Rancher / 关 ingress | ✅ 全部通过 |
-| 配置反例 ×9 | NFS 占位 / `IN_CLUSTER_NFS` 未启用 NFS / `NFS_DEFAULT_SC` 未启用 NFS / 双默认 SC / `SSH_PORT` 越界·非数字 / 空 `CLUSTER_NAME` / 非法 `RANCHER_TLS_SOURCE` / 空 bootstrap 密码 / 空 `K3S_VERSION` | ✅ 全部按预期拒绝 |
+| IPAM 正例 ×5 | 默认拓扑 / 2 server+1 agent / 偶数台 server / 短名 hostname / 无 subnet | ✅ 全部通过（后三项仅告警，符合设计） |
+| IPAM 反例 ×7 | 0 台 server / IP 重复 / hostname 重复 / 非法角色 / 非法 IP / 网段外 / 等于网关 / 空 nodes | ✅ 全部按预期拒绝 |
+| 配置正例 ×8 | 默认 / K3S_VERSION=stable·具体版本 / `USE_UFW=false` / 关 ingress / 关 Rancher / TLS=secret 免 cert-manager / NFS 真实 server | ✅ 全部通过 |
+| 配置反例 ×22 | K3S_VERSION 空·格式错 / K3S_INSTALL_MODE / CNI / CLUSTER_NAME / SSH_PORT·INIT_SSH_PORT / ROOT_SSH_POLICY / INGRESS_KIND / CHARTS_MODE / RANCHER_TLS_SOURCE·证书依赖·密码·hostname / ACME_EMAIL / LOCALDISK 路径·回收策略 / NFS 占位·版本·路径·IN_CLUSTER·默认 SC / 双默认 SC | ✅ 全部按预期拒绝 |
+
+以上 IPAM 与配置用例固化在 **`production/scripts/selftest.sh`**（45 条，可重复跑）。
 | bootstrap 冒烟 | `--dry-run --steps 05,ssh,10` | ✅ 版本解析 + inventory 生成 + 命令打印正常 |
 | 重复内容扫描 | 连续重复行 / 同一 5 行块 ×3 | ✅ 无 |
 | 隐私 | `bash scripts/privacy-check.sh` | ✅ 通过（169 个文件） |
