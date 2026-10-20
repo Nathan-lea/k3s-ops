@@ -170,10 +170,10 @@ containerd_mirrors:
       - "https://docker.1panel.live"
   registry.k8s.io:
     endpoint:
-      - "https://docker.1panel.live"
+      - "https://k8s.m.daocloud.io"
   quay.io:
     endpoint:
-      - "https://docker.1panel.live"
+      - "https://quay.m.daocloud.io"
 ```
 
 该配置会通过 `k3s-common` 角色的 `registries.yaml.j2` 模板写入到 `/etc/rancher/k3s/registries.yaml`，k3s 启动时会将其转化为 containerd 的 hosts.toml 配置。
@@ -265,10 +265,10 @@ mirrors:
       - "https://docker.1panel.live"
   registry.k8s.io:
     endpoint:
-      - "https://docker.1panel.live"
+      - "https://k8s.m.daocloud.io"
   quay.io:
     endpoint:
-      - "https://docker.1panel.live"
+      - "https://quay.m.daocloud.io"
 ```
 
 **说明**: k3s 启动时会读取此文件，自动为 containerd 生成 `/var/lib/rancher/k3s/agent/etc/containerd/certs.d/<registry>/hosts.toml`。本地文件优先于远程仓库。

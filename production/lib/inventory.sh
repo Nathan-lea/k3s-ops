@@ -39,13 +39,15 @@ _INV_ENV_KEYS=(
   ENABLE_LIMITS PROD_REMOVE_TARGET
 )
 
-# 默认镜像加速（与父仓库 docs/manual-deployment.md 中验证过的清单一致）
+# 默认镜像加速（2026-10-20 实测：
+#   docker.1panel.live 只代理 docker.io，不代理 registry.k8s.io/quay.io（NAME_UNKNOWN）；
+#   registry.k8s.io / quay.io 改用 DaoCloud 公共镜像，路径透传已实测可拉）
 _default_containerd_mirrors_yaml() {
   cat <<'YAML'
 docker.io: ["https://docker.1panel.live", "https://docker-0.unsee.tech"]
-registry.k8s.io: ["https://docker.1panel.live"]
-registry.k8s.io/ingress-nginx: ["https://docker.1panel.live"]
-quay.io: ["https://docker.1panel.live"]
+registry.k8s.io: ["https://k8s.m.daocloud.io"]
+registry.k8s.io/ingress-nginx: ["https://k8s.m.daocloud.io"]
+quay.io: ["https://quay.m.daocloud.io"]
 gcr.io: ["https://gcr.mirrors.ustc.edu.cn"]
 YAML
 }

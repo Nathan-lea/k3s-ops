@@ -1,7 +1,7 @@
 # =============================================================================
 # registries.yaml 参考样例（不是被直接读取的文件）
 # =============================================================================
-# 真正生效的文件是各节点上的 /etc/rancher/k3s/registries.yaml，由父仓库的
+# 真正生效的文件是各节点上的 /etc/rancher/k3s/registries.yaml，由自带的
 # ansible/roles/k3s-common/tasks/containerd.yml 依据 containerd_mirrors 变量生成，
 # 而 containerd_mirrors 由 production/lib/inventory.sh 从 cluster.env 拼出来。
 #
@@ -11,15 +11,21 @@
 # 本文件只用于对照"最终生成的长什么样"。
 # =============================================================================
 
-# ---------- 场景 A：沿用父仓库的公网加速（默认，什么都不用配）----------
+# ---------- 场景 A：默认公网加速（什么都不用配；2026-10-20 实测可拉）----------
 mirrors:
   docker.io:
     endpoint:
       - "https://docker.1panel.live"
       - "https://docker-0.unsee.tech"
+  registry.k8s.io:
+    endpoint:
+      - "https://k8s.m.daocloud.io"
+  registry.k8s.io/ingress-nginx:
+    endpoint:
+      - "https://k8s.m.daocloud.io"
   quay.io:
     endpoint:
-      - "https://quay.mirrors.ustc.edu.cn"
+      - "https://quay.m.daocloud.io"
   gcr.io:
     endpoint:
       - "https://gcr.mirrors.ustc.edu.cn"

@@ -135,6 +135,6 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 
 ### 关键操作说明
 
-1. **镜像拉取限制**: 部署环境无法直接访问 Docker Hub/GCR/GitHub raw。使用 docker.1panel.live 作为 Docker Hub 镜像。registry.k8s.io 和 quay.io 同样配置了镜像。
+1. **镜像拉取限制**: 部署环境无法直接访问 Docker Hub/GCR/GitHub raw。使用 docker.1panel.live 作为 Docker Hub 镜像（1panel 只代理 docker.io）；registry.k8s.io 用 k8s.m.daocloud.io、quay.io 用 quay.m.daocloud.io（2026-10-20 实测）。
 2. **Rancher 部署**: 如果 Helm 部署时镜像拉取超时，需在宿主机 Docker 先 pull 镜像，然后 save → scp → k3s ctr images import 导入到 VM 的 containerd。
 3. **路径**: Vagrant Ansible 依赖需通过 `ENV['ANSIBLE_ROLES_PATH']` 设置角色路径，使用 `--config` 而非 `--ansible-cli` 参数。helm 安装在 `~/.local/bin/helm`。

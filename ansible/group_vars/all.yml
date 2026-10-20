@@ -23,12 +23,16 @@ k3s_config:
 # k3s 下载地址
 k3s_download_url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
 
-# 镜像加速
+# 镜像加速（2026-10-20 实测：1panel 只代理 docker.io；registry.k8s.io/quay.io 用 DaoCloud）
 containerd_mirrors:
   docker.io:
     - "https://docker.1panel.live"
     - "https://docker-0.unsee.tech"
+  registry.k8s.io:
+    - "https://k8s.m.daocloud.io"
+  registry.k8s.io/ingress-nginx:
+    - "https://k8s.m.daocloud.io"
   quay.io:
-    - "https://quay.mirrors.ustc.edu.cn"
+    - "https://quay.m.daocloud.io"
   gcr.io:
     - "https://gcr.mirrors.ustc.edu.cn"
