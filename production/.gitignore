@@ -22,6 +22,5 @@ config/cluster.env.local
 artifacts/*
 !artifacts/README.md
 
-# chart 包（*.tgz 由根 .gitignore 排除；这里也补一份防止误提交）
-charts/*.tgz
+# chart 包（已纳入仓库，便于 git clone 一键部署）
 !charts/README.md
