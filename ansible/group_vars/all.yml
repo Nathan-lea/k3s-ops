@@ -21,7 +21,10 @@ k3s_config:
   service_cidr: "{{ service_cidr | default('10.43.0.0/16') }}"
 
 # k3s 下载地址
-k3s_download_url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+# 默认走 Rancher 中国镜像：github.com 在本网络不可达（实测 2026-10-30），
+# 原默认值 https://github.com/k3s-io/k3s/releases/download/... 会导致全新安装失败。
+# 镜像路径用 - 而非 +：v1.30.2+k3s2 → v1.30.2-k3s2
+k3s_download_url: "https://rancher-mirror.rancher.cn/k3s/{{ k3s_version | replace('+', '-') }}/k3s"
 
 # 镜像加速（2026-10-20 实测：1panel 只代理 docker.io；registry.k8s.io/quay.io 用 DaoCloud）
 containerd_mirrors:

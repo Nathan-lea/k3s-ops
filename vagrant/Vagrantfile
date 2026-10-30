@@ -1,9 +1,22 @@
 require 'yaml'
 
-nodes_config = YAML.load_file(File.join(__dir__, 'nodes.yml'))
+# 集群拓扑文件：默认 vagrant/nodes.yml（Linux 路径）。
+# Windows 路径由 win/up.ps1 注入 K3S_OPS_NODES_FILE 指向 win/nodes.windows.yml，
+# 该文件额外包含一台 role: ops 的工作机。
+nodes_file = ENV['K3S_OPS_NODES_FILE']
+nodes_file = File.join(__dir__, 'nodes.yml') if nodes_file.nil? || nodes_file.empty?
+
+nodes_config = YAML.load_file(nodes_file)
 cluster_name = nodes_config['cluster_name']
 network_cfg  = nodes_config['network']
 nodes        = nodes_config['nodes']
+
+# Windows 路径（清单含 ops 节点）由工作机执行 Ansible，宿主机上没有 ansible-playbook。
+# 此时跳过 ansible provisioner；Linux 路径保持原行为（缺 ansible 仍然报错，不静默跳过）。
+windows_mode  = nodes.any? { |n| n['role'] == 'ops' }
+can_provision = !windows_mode || !Vagrant::Util::Which.which('ansible-playbook').nil?
+k8s_nodes     = nodes.reject { |n| n['role'] == 'ops' }
+first_server  = k8s_nodes.find { |n| n['role'] == 'server' } || k8s_nodes.first
 
 ansible_groups = {
   'server' => [],
@@ -30,9 +43,10 @@ Vagrant.configure('2') do |config|
 
     if node['role'] == 'server'
       ansible_groups['server'] << hostname
-    else
+    elsif node['role'] == 'agent'
       ansible_groups['agent'] << hostname
     end
+    # role: ops 的工作机不入任何 Ansible 组（它不参与 k3s 安装）
 
     config.vm.define hostname do |vm|
       vm.vm.hostname = hostname
@@ -53,7 +67,7 @@ Vagrant.configure('2') do |config|
           auto_correct: true
       end
 
-      if idx == nodes.size - 1
+      if idx == nodes.size - 1 && node['role'] != 'ops' && can_provision
         vm.vm.provision 'ansible' do |ansible|
           ansible.playbook = File.join(__dir__, '..', 'ansible', 'playbooks', 'k3s-cluster.yml')
           ansible.groups = ansible_groups
@@ -62,8 +76,8 @@ Vagrant.configure('2') do |config|
             k3s_config:           nodes_config['k3s_config'],
             addons:               nodes_config['addons'],
             cluster_name:         cluster_name,
-            first_server_ip:      nodes.first['ip'],
-            first_server_host:    "#{cluster_name}-#{nodes.first['name']}",
+            first_server_ip:      first_server['ip'],
+            first_server_host:    "#{cluster_name}-#{first_server['name']}",
             k3s_install_dir:      '/usr/local/bin',
             k3s_server_bin:       '/usr/local/bin/k3s',
             k3s_config_dir:       '/etc/rancher/k3s',
@@ -82,7 +96,7 @@ Vagrant.configure('2') do |config|
               ],
             },
           }
-          ansible.host_vars = nodes.each_with_object({}) do |n, h|
+          ansible.host_vars = k8s_nodes.each_with_object({}) do |n, h|
             host = "#{cluster_name}-#{n['name']}"
             h[host] = {
               'node_role' => n['role'],

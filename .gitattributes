@@ -1,0 +1,11 @@
+# 统一换行符：Windows 上 core.autocrlf=true 会把 shell 脚本变成 CRLF，
+# 导致 bash 报 `\r: command not found`。脚本与 YAML 一律 LF。
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.j2    text eol=lf
+*.md    text eol=lf
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
