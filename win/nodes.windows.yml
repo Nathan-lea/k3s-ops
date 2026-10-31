@@ -1,0 +1,59 @@
+# Windows 学员专用拓扑（Linux 路径读 vagrant/nodes.yml，不受影响）
+#
+# 与 vagrant/nodes.yml 的差异只有两处：
+#   1. agent-1 内存 4096 → 2048（8GB 宿主机装得下）
+#   2. 末尾多一台 role: ops 的工作机（不参与集群，只用来跑 Ansible）
+#
+# 内存不足时把 agent-1 调到 1536，或把 ops 调到 768；不要动 server-1。
+
+cluster_name: k3s-demo
+k3s_version: v1.30.2+k3s2
+
+network:
+  subnet: 192.168.56.0/24
+  box: bento/ubuntu-22.04
+
+nodes:
+  - name: server-1
+    role: server
+    ip: 192.168.56.10
+    cpus: 2
+    memory: 4096
+    port_forwards:
+      - guest: 30443
+        host: 8443
+      - guest: 30080
+        host: 8080
+
+  - name: agent-1
+    role: agent
+    ip: 192.168.56.20
+    cpus: 2
+    memory: 2048
+    # 16GB 宿主机可改回 4096，同时把下面的 ops 改成 2048
+
+  # 工作机：装 ansible/kubectl/helm，所有 k3s-ops.sh 命令在这里执行。
+  # 必须是列表最后一项（Vagrantfile 按"最后一个非 ops 节点"挂 provisioner）。
+  - name: ops
+    role: ops
+    ip: 192.168.56.5
+    cpus: 1
+    memory: 1024
+
+k3s_config:
+  disable_traefik: true
+  disable_servicelb: true
+  taint_server: false
+  cluster_cidr: 10.42.0.0/16
+  service_cidr: 10.43.0.0/16
+
+addons:
+  rancher:
+    enabled: true
+    version: 2.9.x
+    hostname: rancher.k3s.local
+    bootstrap_password: admin
+  ingress:
+    type: nginx
+    enabled: true
+    version: 4.11.x

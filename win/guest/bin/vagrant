@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""vagrant shim —— 工作机里没有 Vagrant，这里只实现 k3s-ops.sh 真正用到的部分。
+
+背景：`k3s-ops.sh` 里有 5 处外部 `vagrant` 调用（up / halt|suspend|destroy /
+ssh / ssh），Windows 路径下这些 VM 由 Windows 宿主管，工作机里造不出来
+（VirtualBox 不支持嵌套 VT-x）。为了让 `k3s-ops.sh` 一行都不用改：
+
+  vagrant ssh <node> [...]     → 直接 ssh 到节点（私钥在 ~/.ssh/k3s-ops/）
+  vagrant ssh-config <node>    → 打印等价配置
+  vagrant up/down/destroy/...  → 提示回 Windows 执行，退出码 2
+
+映射数据来自 ~/.k3s-ops-shim.json（由 win/provision-ops.sh 生成）。
+可用环境变量 K3S_OPS_SHIM_CONFIG 指向别的文件。
+"""
+
+import json
+import os
+import sys
+
+CONFIG_PATH = os.environ.get(
+    "K3S_OPS_SHIM_CONFIG", os.path.expanduser("~/.k3s-ops-shim.json")
+)
+
+REFUSE_HINT = """\
+工作机里没有 Vagrant，虚拟机由 Windows 宿主管。
+
+请在 Windows PowerShell 里执行（不是这里）：
+  .\\win\\up.ps1            # 启动 / 重建
+  .\\win\\down.ps1          # 关机（-Suspend 挂起，-Force 强制）
+  .\\win\\destroy.ps1       # 删除
+
+其余命令（install / status / deploy-* / backup / add-node ...）都在工作机里跑。
+"""
+
+
+def die(msg, code=1):
+    sys.stderr.write("vagrant(shim): %s\n" % msg)
+    sys.exit(code)
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except FileNotFoundError:
+        die("找不到 %s，请回到 Windows 重跑 win\\up.ps1" % CONFIG_PATH)
+    except json.JSONDecodeError as exc:
+        die("%s 不是合法 JSON: %s" % (CONFIG_PATH, exc))
+    if not isinstance(cfg.get("nodes"), dict) or not cfg["nodes"]:
+        die("%s 里没有节点信息，请回 Windows 重跑 win\\up.ps1" % CONFIG_PATH)
+    return cfg
+
+
+def resolve(cfg, name):
+    """接受完整主机名（k3s-demo-server-1）或短名（server-1），与 lib/nodes.sh 规则一致。"""
+    nodes = cfg["nodes"]
+    if name in nodes:
+        return name, nodes[name]
+    cluster = cfg.get("cluster_name") or ""
+    if cluster and "%s-%s" % (cluster, name) in nodes:
+        full = "%s-%s" % (cluster, name)
+        return full, nodes[full]
+    for full, info in nodes.items():
+        if info.get("short") == name:
+            return full, info
+    die("未知节点: %s（可选: %s）" % (name, ", ".join(sorted(nodes))))
+
+
+def ssh_argv(cfg, full, info, remote_cmd):
+    user = info.get("user") or cfg.get("user") or "vagrant"
+    key = os.path.expanduser(info.get("key") or "")
+    argv = [
+        "ssh",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        "-o", "ConnectTimeout=15",
+    ]
+    if key:
+        argv += ["-i", key]
+    # 交互式才要 -t；k3s-ops.sh 的 `-- "sudo bash -s" < file` 会传管道，不能加 -t
+    if remote_cmd is None and sys.stdin.isatty():
+        argv.append("-t")
+    argv.append("%s@%s" % (user, info["ip"]))
+    if remote_cmd is not None:
+        argv.extend(remote_cmd)
+    return argv
+
+
+def cmd_ssh(cfg, args):
+    if not args:
+        die("用法: vagrant ssh <node> [-- <命令>] | -c <命令>")
+    name = args[0]
+    rest = args[1:]
+    full, info = resolve(cfg, name)
+
+    remote_cmd = None
+    if rest:
+        if rest[0] == "--":
+            remote_cmd = rest[1:] or None
+        elif rest[0] == "-c":
+            if len(rest) < 2:
+                die("vagrant ssh -c 缺少命令")
+            remote_cmd = [" ".join(rest[1:])]
+        else:
+            die("不支持的 ssh 参数: %s（本 shim 只支持 <node> [-- cmd] 和 -c cmd）" % " ".join(rest))
+
+    argv = ssh_argv(cfg, full, info, remote_cmd)
+    # exec 而不是 subprocess：TTY、stdin（status 的 `sudo bash -s` 管道）和退出码都原样透传
+    try:
+        os.execvp(argv[0], argv)
+    except OSError as exc:
+        die("无法执行 %s: %s" % (" ".join(argv), exc))
+
+
+def cmd_ssh_config(cfg, args):
+    if not args:
+        die("用法: vagrant ssh-config <node>")
+    full, info = resolve(cfg, args[0])
+    print("Host %s" % full)
+    print("  HostName %s" % info["ip"])
+    print("  User %s" % (info.get("user") or cfg.get("user") or "vagrant"))
+    if info.get("key"):
+        print("  IdentityFile %s" % os.path.expanduser(info["key"]))
+    print("  StrictHostKeyChecking no")
+    print("  UserKnownHostsFile /dev/null")
+    print("  LogLevel ERROR")
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__ or "")
+        return 0
+
+    sub = argv[0]
+    if sub in ("ssh", "ssh-config"):
+        cfg = load_config()
+        if sub == "ssh":
+            cmd_ssh(cfg, argv[1:])
+            return 0  # execvp 成功时不会到这里
+        return cmd_ssh_config(cfg, argv[1:])
+
+    sys.stderr.write(REFUSE_HINT)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
