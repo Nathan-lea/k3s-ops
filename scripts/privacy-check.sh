@@ -33,8 +33,6 @@ ALLOW_IPS=(
   # production/scripts/selftest.sh 里刻意构造的"非法/网段外"测试值：
   # 192.168.100.999 不是合法 IP（测越界）、10.9.9.x 落在 subnet 外（测网段校验）。
   "192.168.100.999" "10.9.9.9" "10.9.9.11"
-  # deployment-recommendations.md 里的示例 VPC 网段（文档举例，非本机真实网段）
-  "10.0.0.0"
 )
 # 已确认接受的演示占位密码（设计的一部分，用户明确选择不处理）
 # ChangeMe* 是 production/config/cluster.env.local.example 里的明文占位值，
