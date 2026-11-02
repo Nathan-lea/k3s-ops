@@ -23,7 +23,7 @@ k3s-ops/
 │   ├── Vagrantfile          # 读取 nodes.yml 动态创建 VM
 │   └── nodes.yml            # 集群拓扑配置（核心）
 ├── ansible/
-│   ├── playbooks/           # 12 个 playbook
+│   ├── playbooks/           # 11 个 playbook
 │   ├── roles/
 │   │   ├── k3s-common/      # OS 基础配置（swap/sysctl/firewall/containerd）
 │   │   ├── k3s-server/      # server 安装（init/join）
