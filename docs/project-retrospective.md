@@ -9,7 +9,7 @@
 |---|---|
 | 文档定位 | 项目级复盘 + 方法论文档（非设计文档、非操作手册） |
 | 覆盖周期 | 2026-09-01 → 2026-11-01（62 天，9 个 ISO 周，其中 6 周有提交） |
-| 代码基线 | `main` @ `5b75f24`，101 个提交，214 个跟踪文件 |
+| 代码基线 | 复盘统计截至 2026-11-01（101 个提交）；跟踪文件数为修订时实测 |
 | 数据来源 | `git log` / `git ls-files` / 仓库内文档 / `.superpowers/sdd/` 台账 |
 | 姊妹文档 | `docs/architecture.md`（设计）、`production/design.md`（约束与实现对照）、`production/design-history.md`（需求原文存档） |
 
@@ -123,7 +123,7 @@
 
 | 指标 | 数值 | 说明 |
 |---|---|---|
-| git 跟踪文件 | 214 | 不含 `.gitignore` 掉的 `tests/` 产物与本地笔记 |
+| git 跟踪文件 | 222 | 含完整测试套件；不含本地笔记与运行产物 |
 | 提交总数 | 101 | 含 2 个不符合 Conventional Commits 的早期提交 |
 | 新增 / 删除行 | 39,873 / 2,583 | 净增约 3.7 万行，删除率 6.5% |
 | 教程 | 45 章 + README = 20,730 行 | 平均每章 450 行 |
@@ -769,7 +769,7 @@ Pre-flight scan 逐条核对"消费的东西是否真的被生产"，在**写代
 提交时    ┌─ 人工：一个章节一个提交，信息写"为什么"
           └─ 自动：无（有意为之，避免提交变慢）
 
-推送时    ┌─ pre-push 钩子 → scripts/privacy-check.sh（8 条规则，214 文件，约 2 秒）
+推送时    ┌─ pre-push 钩子 → scripts/privacy-check.sh（8 条规则，222 文件，约 2 秒）
           └─ 失败即阻断，输出逐条问题
 
 变更后    ┌─ tests/run-all.sh（stub，不依赖真集群）
@@ -993,13 +993,13 @@ photorec 类     → Markdown 无文件签名，不适用
 | 周期 | 2026-09-01 11:15 → 2026-11-01 13:00 |
 | 有提交的周 | 6 / 9 |
 | 新增行 / 删除行 | 39,873 / 2,583 |
-| 跟踪文件 | 214 |
+| 跟踪文件 | 222 |
 | 教程 | 45 章 + README，20,730 行 |
 | 其他文档 | 9 篇，4,122 行 |
 | production | 69 文件（8 playbook / 4 角色 / 4 库 / 7 组件模板） |
 | 自研代码 | 约 6,200 行（sh + py + go + j2 + ps1） |
 | 约束条目 | 21 条（`design.md` §2）+ 后续问答补充（§3） |
-| 隐私检查 | 8 条规则，214 文件，约 2 秒 |
+| 隐私检查 | 8 条规则，222 文件，约 2 秒 |
 | 恢复文档 | 17,858 字节 / 151 行 / 10,160 字符 / U+FFFD = 0 |
 
 ### 11.2 集群拓扑与端口
@@ -1056,7 +1056,8 @@ NGINX Gateway Fabric 2.4.2、Kyverno（chart 3.9.1 / app v1.19.1）。
 | `svclb` 与 ingress 抢 30080 | 端口冲突 | 已修：`disable_servicelb: true`，模板条件渲染 |
 | 隐私检查中文文件名漏检 | 静默放过 | 已修：`core.quotepath=false` |
 | 白名单含已删文档的 IP | 豁免腐化 | 已修：同步删除 |
-| AGENTS.md 写"12 个 playbook"，实测 11 个 | 文档与实现不一致 | **未修**（见 12.3） |
+| AGENTS.md 写"12 个 playbook"，实测 11 个 | 文档与实现不一致 | 已修：按实测改为 11 |
+| `tests/` 大部分未入库（仅 2 个文件在仓库） | 别人 clone 后跑不了测试 | 已修：7 个文件入库，`run-all.sh` 全绿 |
 | 教程曾缺失 10 个清单文件 | 照着做会失败 | 已修：可复现性审计补齐 |
 | 42 章命名空间级 Role 失效 | 示例跑不通 | 已修：控制器缓存限定命名空间 |
 | 文档估算镜像大小偏差 20 MB | 读者预期错误 | 已修：改用实测值 |
@@ -1071,11 +1072,6 @@ NGINX Gateway Fabric 2.4.2、Kyverno（chart 3.9.1 / app v1.19.1）。
    缺少"这样做会失败，报错长这样"。后者对学习者更有用。
 4. **没有 CI**。门禁靠 pre-push 钩子，本地配置（`core.hooksPath`）不入库，
    换台机器就失效。理想做法是服务端钩子或 CI。
-5. **测试套件只在本地**。`tests/` 被 `.git/info/exclude` 排除（本地配置，不入库），
-   仓库里只有 `harness.sh` 与 `test-gen-inventory.sh` 两个历史遗留文件；
-   `run-all.sh`、3 个 stub、另外 2 个测试都不在仓库里。
-   **结果：别人 clone 下来跑不了测试。**（当初为了不污染仓库，代价是可移植性。）
-6. **文档元数据不一致**（12.2 最后一项）。
 
 ### 12.4 下次的做法
 
@@ -1083,7 +1079,6 @@ NGINX Gateway Fabric 2.4.2、Kyverno（chart 3.9.1 / app v1.19.1）。
 |---|---|
 | 真机验证前置 | 设计阶段就把"验证环境从哪来"写进约束，不留到最后 |
 | CI 化门禁 | Gitea Actions 跑 `privacy-check` + `tests/run-all.sh`，不只依赖本地钩子 |
-| 测试入库 | `tests/` 改为入库，产物（日志）才 gitignore |
 | 失败路径 | 每章加一节"常见报错与处置"，含真实报错原文 |
 | 单点演练 | 对每个 `failurePolicy=Fail` 的组件做一次"关掉它"的演练并记录耗时 |
 | 文档自检脚本入库 | 把 8.4 的检查固化成 `scripts/check-docs.py`，纳入门禁 |
@@ -1166,7 +1161,7 @@ k3s-ops/
 ├── ansible/                   11 个 playbook + 4 个角色
 ├── lib/                       logging.sh / nodes.sh（节点名唯一规则）
 ├── scripts/                   privacy-check / gen-inventory / bootstrap …
-├── tests/                     stub harness + 3 个测试（本地，不入库）
+├── tests/                     stub harness + 3 个测试（随仓库维护）
 ├── win/                       Windows 工作机入口与 guest 脚本
 ├── addons/                    Helm values
 ├── docs/
