@@ -1,0 +1,4 @@
+#!/bin/bash
+# stub ansible-playbook：只记录参数，不执行任何 playbook
+echo "ANSIBLE_CALL: $*" >> "${ANSIBLE_STUB_LOG}"
+exit 0

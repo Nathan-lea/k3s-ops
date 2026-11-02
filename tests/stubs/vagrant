@@ -1,0 +1,23 @@
+#!/bin/bash
+# stub vagrant：只记录被调用的参数，不与真实 VirtualBox 交互
+# 关键：模拟拉取 k3s.yaml 时必须输出合法 kubeconfig，否则测试无法发现
+# "日志输出污染产物文件" 这类问题
+echo "VAGRANT_CALL: $*" >> "${VAGRANT_STUB_LOG}"
+
+case "$*" in
+  *k3s.yaml*)
+    cat <<'EOF'
+apiVersion: v1
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+  name: default
+contexts: []
+current-context: default
+kind: Config
+preferences: {}
+users: []
+EOF
+    ;;
+esac
+exit 0

@@ -81,7 +81,7 @@ WIN_NODES="${TMP}/nodes.windows.yml"
 python3 - "${PROJECT_DIR}/vagrant/nodes.yml" "${WIN_NODES}" <<'PY'
 import sys, yaml
 cfg = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
-cfg["nodes"].append({"name": "ops", "role": "ops", "ip": "192.168.56.5",
+cfg["nodes"].append({"name": "ops", "role": "ops", "ip": "192.168.56.11",
                      "cpus": 1, "memory": 1024})
 yaml.safe_dump(cfg, open(sys.argv[2], "w", encoding="utf-8"), sort_keys=False, allow_unicode=True)
 PY

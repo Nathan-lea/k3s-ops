@@ -1,0 +1,20 @@
+#!/bin/bash
+# stub kubectl：输出固定的假数据，让 health-check.sh 能在宿主机离线跑完
+# 用法：KUBECTL_STUB_LOG=<文件> 时记录调用
+[ -n "${KUBECTL_STUB_LOG:-}" ] && echo "KUBECTL_CALL: $*" >> "${KUBECTL_STUB_LOG}"
+
+case "$*" in
+  "get nodes -o name")
+    echo "node/k3s-demo-server-1"
+    echo "node/k3s-demo-agent-1"
+    ;;
+  "describe node/"*)
+    printf 'Conditions:\n  Ready: True\n  MemoryPressure: False\n'
+    ;;
+  *)
+    echo "NAME                 STATUS   ROLES                       AGE   VERSION"
+    echo "k3s-demo-server-1    Ready    control-plane,etcd,master   126d  v1.30.2+k3s2"
+    echo "k3s-demo-agent-1     Ready    <none>                      119d  v1.30.2+k3s2"
+    ;;
+esac
+exit 0
