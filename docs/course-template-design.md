@@ -69,7 +69,7 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 
 | # | 反目标 | 为什么是失败 |
 |---|---|---|
-| A1 | `core/` 里出现 `if profile == k8s` 这类分支 | 一旦开始分叉，第二个 profile 就会把内核拖成补丁堆 |
+| A1 | `core/` 里出现 `if profile == "multi-vm"` 这类分支 | 一旦开始分叉，第二个 profile 就会把内核拖成补丁堆 |
 | A2 | 生成出来的项目第一次跑门禁就要手工修 | 模板把成本转嫁给了用户，等于没解决问题 |
 | A3 | 模板自己没有被测试覆盖 | 模板腐化时无人发现，错误会复制到每一门课 |
 | A4 | 用户克隆后必须读三篇文档才能开始 | 上手成本高于收益，用户会绕过模板直接抄第一课 |
@@ -554,13 +554,17 @@ generated_at: 2026-11-02
 主题**只出现在值里**（`chapters.dir`、`tools`、stub 清单），不出现在名字里。
 否则第一门 Docker 课会想"照 k8s 那个再来一份"，剖面就会按主题繁殖（A1）。
 
+**没有默认剖面**：`new-course.sh` 的 `--profile` 必填，不写就报错并列出可选值。
+`course.yml` 里的 `profile:` 只是**生成来源的记录**（供同步时比对），不驱动任何分支——
+`core/` 与 `platform/` 都不读它（A1）。
+
 ### 9.1 `minimal`（最小可用）
 
 | 项 | 值 |
 |---|---|
 | 工具 | `git`、`python3`、`pyyaml`（都 required，`where: both`） |
 | 平台 | `platforms.windows.mode: ssh-only`（Windows 只需 2 步，`vagrant ssh` 进 VM 敲命令） |
-| 镜像 | `default_box: bento/ubuntu-24.04`，单节点、无节点级覆盖；`assert_absent: [docker]` |
+| 镜像 | `default_box: bento/ubuntu-24.04`，单节点、无节点级覆盖；`assert_absent: []`（默认空，课程按需声明） |
 | 事实源 | `docs/architecture.md` 的拓扑表（无独立配置文件） |
 | 验证 | `./scripts/gate.sh all` |
 | stub | 无 |
@@ -577,7 +581,7 @@ generated_at: 2026-11-02
 | 平台 | `platforms.windows.mode: control-node`（Windows 侧 3 台 VM：2 节点 + `ops` 控制机） |
 | 镜像 | `default_box: bento/ubuntu-24.04`；节点可覆盖 `box:`（如 `box: bento/rockylinux-9`） |
 | 事实源 | `vagrant/nodes.yml` |
-| 验证 | `verify.self: ./scripts/gate.sh all`；`verify.infra` 由作者填（如 `./k3s-ops.sh status`） |
+| 验证 | `verify.self: ./scripts/gate.sh all`；`verify.infra` **默认空**，由作者填成课程的真机检查（例如 `./k3s-ops.sh status`） |
 | 白名单 | `privacy.derive.from: vagrant/nodes.yml`（`ip-like-scalars`） |
 | stub | `vagrant`、`ansible-playbook`、`kubectl` |
 | 章节目录 | `docs/chapters/`（种子大纲偏 k8s，按主题改） |
@@ -611,7 +615,7 @@ generated_at: 2026-11-02
 | `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错 |
 | `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`**；目录名必须在白名单内（`minimal` / `multi-vm`），新增剖面要走设计决策，不能顺手按主题加 |
 | `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；全仓库无 BOM；`git ls-files --eol` 索引换行正确；`nodes.windows.yml` 重新生成后 diff 为空；PS 静态合规（无 `??`/`?.`/`-Parallel`/`Set-Content`）；Linux 侧 check 脚本可在 CI 跑 |
-| `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；`assert_absent` 命中已装命令 → 退出码 1（用临时目录里的假可执行文件构造，不建 VM） |
+| `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；夹具声明 `assert_absent: [nginx]` 且命中已装命令 → 退出码 1（用临时目录里的假可执行文件构造，不建 VM）；`assert_absent` 为空时不做缺席断言 |
 
 模板自己的 CI 跑这九个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
 
@@ -777,7 +781,7 @@ platforms:
     provider: virtualbox         # C13：固定值，不允许改成别的
     default_box: "bento/ubuntu-24.04"   # C15：只允许 bento 系（§16）
     arch: amd64
-    assert_absent: [docker, nginx]
+    assert_absent: []            # 默认空；课程按需声明，如 [docker, nginx]（§16.5）
   windows:
     mode: control-node           # ssh-only | control-node
     min_ps: "5.1"                # 学员机器默认只有 5.1
@@ -1057,21 +1061,22 @@ platforms:
     provider: virtualbox            # C13：固定值
     default_box: "bento/ubuntu-24.04"
     arch: amd64
-    assert_absent: [docker, nginx]  # 干净起点断言，见 §16.5
+    assert_absent: []               # 默认空，模板不主张镜像里装了什么（§16.5）
 ```
 
-节点级覆盖写在事实源（如 `vagrant/nodes.yml`）：
+节点级覆盖写在事实源（如 `vagrant/nodes.yml`）。`role` 只是课程自己用的标签，
+没有预置取值：
 
 ```yaml
 nodes:
-  - name: server-1
-    role: server
+  - name: app-1
+    role: app                      # 标签由课程定义，这里仅作示例
     ip: 192.168.56.10
     box: bento/ubuntu-24.04        # 与默认值相同，可省略
-  - name: os-demo-rocky
-    role: agent
+  - name: db-1
+    role: db
     ip: 192.168.56.11
-    box: bento/rockylinux-9        # 覆盖默认值
+    box: bento/rockylinux-9        # 覆盖默认值：跨系演示
 ```
 
 三条规则：
@@ -1148,6 +1153,10 @@ nodes:
 默认**失败**（退出码 1），加 `--warn` 才降级为警告。理由很直接：预装了 `nginx`
 的镜像会让"从零安装 nginx"那一章从第一条命令起就是错的，而这种错误看起来像
 "配置没问题但行为不对"，最难查。
+
+`assert_absent` 的**默认值是 `[]`**：模板不知道你的课要教什么，也就不替你主张
+镜像里该没有什么。由课程作者在 `course.yml` 里声明——Docker 课写 `[docker]`，
+nginx 章节课写 `[nginx]`。列表为空时 `baseline.sh` 只记录发行版与内核，不做缺席断言。
 
 镜像**实际版本**的落盘分两处：
 
