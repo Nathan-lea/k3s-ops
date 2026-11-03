@@ -6,8 +6,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 待批准实施（8 问处置见 §16；§15 跨平台为新增，未独立评审） |
-| 日期 | 2026-11-03（初版 11-02，新增 §15 跨平台设计） |
+| 状态 | 待批准实施（8 问处置见 §17；§15 跨平台、§16 镜像方案均为新增，未独立评审） |
+| 日期 | 2026-11-03（初版 11-02，新增 §15 跨平台、§16 镜像与多系统） |
 | 母项目 | `k3s-ops`（第一课，已完成，**不回填**） |
 | 产物仓库 | `course-template`（新建，独立） |
 | 目标用户 | 作者本人（后续课程）+ 克隆者 |
@@ -45,12 +45,13 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 | # | 目标 | 可验证判据 |
 |---|---|---|
 | G1 | 一条命令生成新课程仓库，含完整骨架 | `new-course.sh ../demo --profile generic` 成功，且生成物门禁全绿 |
-| G2 | 生成即自带门禁（隐私 / 文档 / 前置条件） | 生成结束时三道检查都跑过且退出码 0 |
+| G2 | 生成即自带门禁（隐私 / 文档 / 前置条件 / 镜像） | 生成结束时四道检查都跑过且退出码 0 |
 | G3 | 规范只写一份，所有课程强制一致 | 规范文件全部在 `core/`，`profiles/` **不含**任何规范 |
 | G4 | 模板可演进，老课程能同步 `core/` 更新 | `sync-template.sh` 能把 core 更新合入，且不碰课程内容 |
 | G5 | 复盘 §12.4 的七条改进全部落成机制 | §8 的对照表逐条有落点文件 |
 | G6 | k8s 与非 k8s 课程同一套模板 | 两个 profile 生成出的门禁行为完全一致 |
 | G7 | **Linux 桌面与 Windows 桌面学员都能完成全部实验**，虚拟机平台统一 VirtualBox | 两个 profile 各生成一次，`platform/` 齐备；Windows 侧只需 2 步；Linux 侧零额外步骤（§15） |
+| G8 | 默认 Ubuntu 够用，需要时**按节点换镜像**演示不同发行版 | `gate.sh boxes` 通过；一台 Debian 系与一台 RHEL 系 VM 能同课程并存（§16） |
 
 ### 2.2 非目标
 
@@ -62,6 +63,7 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 - **不做插件市场**。profile 就是目录，没有注册中心。
 - **不走 WSL2 / Docker Desktop 路线**。与 VirtualBox 互斥，见 §15.1（H3）。
 - **不给 Windows 写第二套命令**。只提供入口脚本与控制机，课程命令仍是一套（§15.3）。
+- **不做自己的虚拟机镜像**。不自制 box、不走 ISO 手工最小安装、不覆盖非 bento 镜像（§16.6）。
 
 ### 2.3 反目标（技术上跑通也算失败）
 
@@ -93,10 +95,14 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 | C12 | 学员机器是 **Linux 桌面 + Windows 桌面** | "学员使用的机器以 linux 桌面和 Windows 桌面为主" |
 | C13 | 虚拟机平台**统一 VirtualBox** | "统一使用 virtualBox 做为虚拟机平台" |
 | C14 | 两种桌面都要能**正常完成实验** | "要保证两种桌面的用户都能正常操作——就像当前项目一样" |
+| C15 | 镜像**只用 bento 系现成 box**，默认 Ubuntu，需要时按节点换 | "只用 bento 系现成 box 就够"；服务器 OS 类课程可混两个系演示差异 |
 
 C12–C14 的详细设计见 **§15 跨平台设计**。这是全篇最容易做浅的一块：
 只写"支持 Windows"等于没写，必须把换行、编码、权限、嵌套虚拟化这些
 真正会拦住学员的东西逐条落到文件上。
+
+C15 的详细设计见 **§16 虚拟机镜像与多系统**：默认值、允许清单、跨系差异、
+干净起点断言、版本策略。
 
 C8 的四条红线是本模板的**存在理由**，§6 专门展开。
 
@@ -133,6 +139,10 @@ course-template/
 │   ├── .gitea/workflows/gate.yml
 │   ├── platform/                  # 平台适配层（与主题无关，见 §15）
 │   │   ├── README.md              # 平台矩阵 + 支持边界
+│   │   ├── vm/                    # 镜像与干净起点（与桌面平台无关，见 §16）
+│   │   │   ├── boxes.yml          # bento 允许清单（只存稳定属性，不存版本）
+│   │   │   ├── probe.sh           # 记录实际镜像版本（宿主执行）
+│   │   │   └── baseline.sh        # VM 内断言 assert_absent
 │   │   ├── linux/check.sh         # VirtualBox / vboxdrv / vboxusers / 网段 / 内存
 │   │   └── windows/               # 按 platforms.windows.mode 裁剪（见 §15.6）
 │   │       ├── check.ps1          # 管理员 / PS 版本 / Hyper-V / 网段 / 内存
@@ -143,8 +153,9 @@ course-template/
 │   │       ├── emit.ps1           # UTF-8 无 BOM 写入工具函数
 │   │       └── guest/bin/<tool>   # 宿主专属命令的 shim
 │   ├── scripts/
-│   │   ├── gate.sh                # 统一门禁入口（privacy|docs|prereqs|all）
+│   │   ├── gate.sh                # 统一门禁入口（privacy|docs|prereqs|boxes|all）
 │   │   ├── privacy-check.sh       # 8 条规则
+│   │   ├── check-boxes.sh         # 镜像允许清单 + 家族统计（§16.2）
 │   │   ├── check-docs.py          # 围栏/表格/锚点/跳级/编码/行尾
 │   │   ├── check-prereqs.sh       # 读 course.yml，缺工具给安装命令
 │   │   ├── gen-stats.py           # 规模数字自动化
@@ -243,9 +254,13 @@ skills:                    # agent 技能：仅提示，永不改变退出码
   required: [brainstorming, writing-plans]
   optional: [systematic-debugging]
 
-# --- C12/C13/C14 平台（完整字段见 §15.5） --------------------------
+# --- C12/C13/C14/C15 平台（完整字段见 §15.5、§16.2） -------------------
 platforms:
-  vm: virtualbox           # 固定，不允许改成别的
+  vm:
+    provider: virtualbox       # C13：固定值，不允许改成别的
+    default_box: "bento/ubuntu-24.04"   # C15：只允许 bento 系（§16）
+    arch: amd64
+    assert_absent: [docker, nginx]      # 干净起点断言，VM 内执行（§16.5）
   windows:
     mode: control-node     # ssh-only | control-node
     min_ps: "5.1"
@@ -305,18 +320,21 @@ chapters:
    也会被复制粘贴丢失；只有字段能进检查和报表。
 4. **`platforms` 是唯一允许描述"宿主"的块**。它只说"用什么虚拟机、Windows 要不要
    控制机、控制机叫什么"，不说"Windows 上该跑什么命令"——命令永远只有一套（§15.3）。
+   `vm` 是**对象**而不是字符串（`vm: virtualbox`），因为镜像相关字段不止一个
+   （`provider` / `default_box` / `arch`），字符串没法往下加（§16.2）。
 
 ---
 
 ## 5. 门禁设计
 
-### 5.1 四道门禁
+### 5.1 五道门禁
 
 | 门禁 | 脚本 | 触发时机 | 失败后果 |
 |---|---|---|---|
 | 隐私 | `privacy-check.sh` | pre-push（强制）+ CI | 阻断推送 |
 | 文档 | `check-docs.py` | `gate.sh` + CI | 阻断 |
 | 前置条件 | `check-prereqs.sh` | 生成时 + 每次 `gate.sh all` | 缺必装项则阻断 |
+| 镜像 | `check-boxes.sh` | `gate.sh all` + CI | 未知 box 名阻断；跨系提示不阻断（§16.2） |
 | 红线自检 | `gate.sh redlines` | 开工前手工跑 | 提示（见 §6） |
 
 统一入口 `scripts/gate.sh`：
@@ -325,6 +343,7 @@ chapters:
 gate.sh privacy    # 只跑隐私（pre-push 用，约 2 秒）
 gate.sh docs       # 只跑文档
 gate.sh prereqs    # 只跑前置条件
+gate.sh boxes      # 只跑镜像（静态，不需要 VirtualBox）
 gate.sh all        # 全跑（CI 用）
 ```
 
@@ -525,6 +544,7 @@ generated_at: 2026-11-02
 |---|---|
 | 工具 | `git`、`python3`、`pyyaml`（都 required，`where: both`） |
 | 平台 | `platforms.windows.mode: ssh-only`（Windows 只需 2 步，`vagrant ssh` 进 VM 敲命令） |
+| 镜像 | `default_box: bento/ubuntu-24.04`，单节点、无节点级覆盖；`assert_absent: [docker]` |
 | 事实源 | `docs/architecture.md` 的拓扑表（无独立配置文件） |
 | 验证 | `./scripts/gate.sh all` |
 | stub | 无 |
@@ -539,6 +559,7 @@ generated_at: 2026-11-02
 |---|---|
 | 工具 | 上表 + `vagrant`、`ansible`、`kubectl`、`helm`（后四者 `where: host` 或 `control`，见 §15.5） |
 | 平台 | `platforms.windows.mode: control-node`（Windows 侧 3 台 VM：2 节点 + `ops` 控制机） |
+| 镜像 | `default_box: bento/ubuntu-24.04`；节点可覆盖 `box:`（如 `box: bento/rockylinux-9`） |
 | 事实源 | `vagrant/nodes.yml` |
 | 验证 | `verify.self: ./scripts/gate.sh all`；`verify.infra` 由作者填（如 `./k3s-ops.sh status`） |
 | 白名单 | `privacy.derive.from: vagrant/nodes.yml`（`ip-like-scalars`） |
@@ -562,7 +583,7 @@ generated_at: 2026-11-02
 
 | 测试 | 覆盖 | 断言要点 |
 |---|---|---|
-| `test-generate.sh` | 每个 profile × 每个 `windows.mode` | 目录存在、无 `{{` 残留、三道门禁全绿、`git ls-files` 含 `tests/`；`ssh-only` 下**不存在** `provision-control.sh` 与 shim |
+| `test-generate.sh` | 每个 profile × 每个 `windows.mode` | 目录存在、无 `{{` 残留、四道门禁全绿、`git ls-files` 含 `tests/`；`ssh-only` 下**不存在** `provision-control.sh` 与 shim |
 | `test-idempotent.sh` | 生成器 | 非空目标目录 → 拒绝且**不写入任何文件** |
 | `test-sync.sh` | 同步 | 老版本生成 → 模板升 MINOR → sync → `managed` 更新、`seed-only` 不变、`managed-region` 只换区域；本地改过 `managed` 则退出码 2 |
 | `test-privacy-gate.sh` | 隐私门禁 | 正例 0 / 反例 1 + 位置正确；**反例夹具建在临时目录**，且断言仓库内无违规文件 |
@@ -570,8 +591,9 @@ generated_at: 2026-11-02
 | `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错 |
 | `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`** |
 | `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；全仓库无 BOM；`git ls-files --eol` 索引换行正确；`nodes.windows.yml` 重新生成后 diff 为空；PS 静态合规（无 `??`/`?.`/`-Parallel`/`Set-Content`）；Linux 侧 check 脚本可在 CI 跑 |
+| `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；`assert_absent` 命中已装命令 → 退出码 1（用临时目录里的假可执行文件构造，不建 VM） |
 
-模板自己的 CI 跑这八个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
+模板自己的 CI 跑这九个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
 
 ---
 
@@ -580,15 +602,18 @@ generated_at: 2026-11-02
 | 阶段 | 产出 | 完成判据 |
 |---|---|---|
 | P0 | 仓库骨架、`course.yml` schema、`new-course.sh --dry-run` | 能打印"将要生成什么"，不落盘 |
-| P1 | `core/` 四道门禁 + `.gitattributes` + BOM/换行校验 + 门禁自测 | `test-privacy-gate.sh` / `test-docs-gate.sh` / `test-platform.sh`（换行部分）全绿 |
-| P2 | `generic` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 端到端生成 | `test-generate.sh generic --mode ssh-only` 全绿；Linux 桌面手工走一遍 |
-| P3 | `k8s-vagrant` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`） | `test-generate.sh k8s-vagrant --mode control-node` 全绿；PS 静态合规 |
+| P1 | `core/` 门禁（隐私 / 文档 / 前置条件）+ `.gitattributes` + BOM/换行校验 + 门禁自测 | `test-privacy-gate.sh` / `test-docs-gate.sh` / `test-platform.sh`（换行部分）全绿 |
+| P2 | `generic` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 镜像清单与 `assert_absent` + 端到端生成 | `test-generate.sh generic --mode ssh-only` 全绿；`test-boxes.sh` 全绿；Linux 桌面手工走一遍 |
+| P3 | `k8s-vagrant` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`）+ 节点级 `box:` 覆盖 | `test-generate.sh k8s-vagrant --mode control-node` 全绿；PS 静态合规；两家族并存的拓扑能过 `gate.sh boxes` |
 | P4 | `sync-template.sh` + 版本策略 | `test-sync.sh` 全绿 |
 | P5 | CI（Gitea + GitHub）+ 模板自测进 CI | workflow 文件存在、两处 `gate.sh all` 等价、本地静态校验通过；**不要求真跑过**（§14） |
 
 **P2 是第一个真正的里程碑**：从这一阶段起，"生成一个能跑门禁的项目"这件事才成立。
 
 **平台工作不在独立阶段**，而是并进 P2（`ssh-only`）与 P3（`control-node`）——否则会得到"做完 P3 才发现平台层要返工"的顺序错误。
+
+**镜像工作同理**：并进 P2（默认单镜像 + `assert_absent`）与 P3（节点级 `box:` 覆盖）。
+`boxes.yml` 只是数据、`check-boxes.sh` 只是门禁，没有独立阶段可切。
 
 Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、编码）**不属于任何阶段的完成判据**，它们只能标注"未验证"（§15.14）。把不可执行的事写进判据，等于给验收注水。
 
@@ -608,6 +633,8 @@ Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、�
 | `series` 名 | `devops-self-study` | 与第一课定位一致，改起来只是字符串 |
 | `--no-git` | 支持 | 在已有仓库里生成是真实需求，成本 5 行 |
 | 示例章节 | **不附带** | 模板里出现课程正文就违反 §2.2；八段式靠 `conventions.md` 说明 |
+| 默认镜像 | `bento/ubuntu-24.04` | 24.04 LTS 标准支持到 2029-04，覆盖整个系列；代价是第一课的实测结论在 22.04 上取得，`k8s-vagrant` 首次真机跑要在 24.04 上复核（§16.1） |
+| `boxes.yml` 存什么 | 只存家族 / 包管理 / 防火墙 / SELinux，**不存版本** | 版本随构建滚动，存了就要长期跟着改；实测版本记在 README，允许过时（§16.6） |
 
 ---
 
@@ -624,6 +651,11 @@ Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、�
 | Windows 实机行为 | 模板作者没有 Windows 机器；只做静态合规 + 明确标注"未验证"（§15.14） |
 | 学员机器性能差异 | 只比较内存总量，不测实际 CPU/IO；拓扑可调，但调多少不管 |
 | VirtualBox 版本碎片 | 只要求 ≥ 7.0，不覆盖各发行版打包差异 |
+| 非 bento 镜像 | 适配成本按镜像计（默认用户、Guest Additions、网络各不相同）；C15 已把来源钉在 bento 系（§16.6） |
+| ISO 手工最小安装 / 自制 box | "最小"由 bento + `assert_absent` 覆盖；做 ISO 只会把失败点提前到分区与引导 |
+| arm64 与 Windows guest | 各需一套独立验收矩阵，且 Windows 控制机方案本身是 amd64 假设 |
+| box 版本锁定 | 与 bento 按需重发的节奏冲突；回退是操作而不是配置（§16.6） |
+| 跨发行版的通用装包/防火墙封装 | 那正是服务器 OS 类课程要教的内容；模板预置等于按 profile 分叉（§16.4，A1） |
 
 ---
 
@@ -698,6 +730,10 @@ H3 要单独说一句：WSL2 看着最省事（Windows 里自带 bash），但�
 ```
 core/platform/
 ├── README.md                  # 平台矩阵 + 支持边界（写清"什么没验证"）
+├── vm/                        # 镜像与干净起点（与桌面平台正交，见 §16）
+│   ├── boxes.yml              # bento 允许清单（家族/包管理/防火墙/SELinux，不存版本）
+│   ├── probe.sh               # 记录实际镜像版本（宿主执行，写 logs/vm-probe.txt）
+│   └── baseline.sh            # VM 内断言 assert_absent + 记录 os-release / 内核
 ├── linux/
 │   └── check.sh               # VirtualBox / vboxdrv / vboxusers / 网段 / 内存
 └── windows/
@@ -717,7 +753,11 @@ core/platform/
 
 ```yaml
 platforms:
-  vm: virtualbox                 # C13：固定值，不允许改成别的
+  vm:
+    provider: virtualbox         # C13：固定值，不允许改成别的
+    default_box: "bento/ubuntu-24.04"   # C15：只允许 bento 系（§16）
+    arch: amd64
+    assert_absent: [docker, nginx]
   windows:
     mode: control-node           # ssh-only | control-node
     min_ps: "5.1"                # 学员机器默认只有 5.1
@@ -751,10 +791,14 @@ tools:
 
 `check-prereqs.sh` 按 `where` 与当前平台过滤：Linux 桌面查 `host` + `both`，控制机里查 `control` + `both`。默认值 `both`（不写不漏）。
 
+`vm` 块里的镜像字段（`default_box` / `arch` / `assert_absent`）与桌面平台**正交**：
+Linux 桌面和 Windows 桌面跑的是同一批 box，差异只在"谁去启动它们"（§16.2）。
+
 ### 15.6 生成器按字段裁剪
 
 | 产物 | `ssh-only` | `control-node` |
 |---|---|---|
+| `platform/vm/{boxes.yml,probe.sh,baseline.sh}` | ✓ | ✓ |
 | `platform/windows/check.ps1`、`up/down/destroy.ps1`、`emit.ps1` | ✓ | ✓ |
 | `platform/windows/provision-control.sh` | ✗ | ✓ |
 | `platform/windows/guest/bin/*`（shim） | ✗ | ✓ |
@@ -850,7 +894,10 @@ Vagrantfile text eol=lf
 
 第 7 步写两份不是冗余：`vagrant ssh -c` 与 `ssh host cmd` 都是**非交互 shell**，不读 `~/.bashrc`。第一课只写了 `.bashrc`，结果 `up.ps1 -Install` 的第二条命令找不到 `ansible-playbook`。
 
-**Ansible 版本必须钉**：Ubuntu 22.04 的控制机 Python 是 3.10，`ansible-core` 2.18+ 要求 3.11+。所以写 `ansible-core>=2.16,<2.18`，不要裸写 `ansible-core`。
+**Ansible 版本必须钉**：控制机默认是 Ubuntu 24.04（Python 3.12）。`ansible-core` 从 2.22
+起要求 Python ≥3.13，3.12 上装不上；所以写 `ansible-core>=2.18,<2.22`，
+不要裸写 `ansible-core`。第一课的控制机是 22.04（Python 3.10），当时必须 `<2.18`——
+这条上限是跟着控制机 Python 版本走的，不是固定值。
 
 ### 15.11 拓扑不复制两份
 
@@ -949,10 +996,182 @@ Linux runner 上若装了 `pwsh`，额外做 `[ScriptBlock]::Create()` 语法解
 
 ---
 
-## 16. 独立评审的 8 个问题与处置
+## 16. 虚拟机镜像与多系统
+
+### 16.1 决定：默认 Ubuntu，多系统只换镜像
+
+先分清两件事：
+
+- **教学默认**：Docker、CI/CD、Terraform、k8s、监控——这些课在 Ubuntu 上跑完全够，
+  换发行版只是在给学员增加无关变量。
+- **教学内容**：只有"服务器 OS 运维"这类课，包管理、防火墙、SELinux 的**差异本身**
+  才是要讲的，这时才需要同屏两个系（如 Debian + Rocky）。
+
+所以模板给的是"一个默认镜像 + 允许按节点覆盖"，不是"支持任意发行版"：
+
+| 决定 | 值 | 理由 |
+|---|---|---|
+| 默认镜像 | `bento/ubuntu-24.04` | LTS，标准支持到 2029-04，覆盖整个系列；Python 3.12 也让 Ansible 的版本上限能放宽一档（§15.10） |
+| 覆盖粒度 | 按**节点**覆盖，不按课程 | 多系统课是"两台机器不同"，不是"整门课换系统" |
+| 镜像来源 | 只用 bento 系现成 box | 都带 VirtualBox + amd64、都是 minimal 基线、都预装 Guest Additions |
+| 架构 | `amd64` 固定 | Apple Silicon 的 arm64 要另一套验收，不在支持面（§16.6） |
+| 版本 | **不钉** | 理由见 §16.6，配套做法是记录实测版本而不是约束版本 |
+
+**换默认值的代价，要写在明面上**：第一课的实测结论（Ansible 版本、包名、
+systemd 行为）是在 **22.04** 上得到的。模板默认改为 24.04 之后：
+
+- `22.04` 仍留在允许清单里，需要精确对齐第一课的老课程可以按节点写 `box: bento/ubuntu-22.04`；
+- `k8s-vagrant` 剖面第一次真机跑必须在 **24.04** 上复核，不能把第一课的结论直接搬过来；
+- 复核前，它和 §15.14 的 Windows 项一样属于"未验证"——**没跑过就说没跑过**。
+
+**为什么不"支持所有 box"**：每多支持一类镜像，就多一组"默认用户 / Guest Additions 版本 /
+网络配置方式 / 是否 systemd"的差异要验。bento 恰好把这些抹平了，边界最省。
+
+### 16.2 两个字段：`default_box` 与节点 `box`
+
+课程级默认写在 `course.yml`：
+
+```yaml
+platforms:
+  vm:
+    provider: virtualbox            # C13：固定值
+    default_box: "bento/ubuntu-24.04"
+    arch: amd64
+    assert_absent: [docker, nginx]  # 干净起点断言，见 §16.5
+```
+
+节点级覆盖写在事实源（如 `vagrant/nodes.yml`）：
+
+```yaml
+nodes:
+  - name: server-1
+    role: server
+    ip: 192.168.56.10
+    box: bento/ubuntu-24.04        # 与默认值相同，可省略
+  - name: os-demo-rocky
+    role: agent
+    ip: 192.168.56.11
+    box: bento/rockylinux-9        # 覆盖默认值
+```
+
+三条规则：
+
+1. **省略即继承**。节点不写 `box` 就用 `default_box`。Vagrantfile 里是
+   `box = node.get('box') or vm_cfg['default_box']`——这也顺手修掉第一课
+   `config.vm.box = network_cfg['box']` 的"整机共用一个 box"限制。
+2. **`box` 只影响镜像**。命令、目录、门禁、章节格式与镜像无关；
+   换了镜像而课程命令一个字没变，说明这台机器只是换了底座。
+3. **`gate.sh boxes` 校验名字**。允许清单在 `core/platform/vm/boxes.yml`，
+   命中不了就报错并给最近候选。这是最容易记错的一类名字：`bento/rocky-9` 不存在
+   （现役是 `bento/rockylinux-9`），`bento/oracle-9` 2024-01 起停更
+   （现役是 `bento/oraclelinux-9`）——本次设计查证时就先写错了前一个。
+
+**家族不靠猜**：`boxes.yml` 给每个 box 标 `family`（`debian` / `rhel` / `suse` / `other`），
+`check-boxes.sh` 读这张表统计。不解析 `/etc/os-release`——那是运行期的事，
+而门禁要在没有 VM 的时候也能跑（CI 上没有 VirtualBox）。
+
+### 16.3 bento 现役清单
+
+下表是 2026-11-03 用 Vagrant Cloud API 逐个确认过 `virtualbox` provider 与 `amd64`
+架构存在的现役 box。**清单只存稳定属性，不存版本号**（版本会变，见 §16.6）：
+
+| 家族 | 现役 box | 包管理 | 防火墙 | SELinux | 用途 |
+|---|---|---|---|---|---|
+| Debian 系 | `bento/ubuntu-22.04`、`-24.04`、`-26.04` | apt | ufw | 无 | **默认取 24.04**；22.04 用于对齐第一课，26.04 尚未实测 |
+| Debian 系 | `bento/debian-11`、`-12`、`-13` | apt | ufw | 无 | 与 Ubuntu 对比 apt 版本与默认包差异 |
+| RHEL 系 | `bento/rockylinux-8`、`-9`、`-10` | dnf | firewalld | enforcing | 多系统课的 RHEL 代表（**首选**） |
+| RHEL 系 | `bento/almalinux-8`、`-9`、`-10` | dnf | firewalld | enforcing | 同族的替代品牌 |
+| RHEL 系 | `bento/oraclelinux-9`、`-10` | dnf | firewalld | enforcing | 只在课程真讲 Oracle 时用 |
+| RHEL 系 | `bento/centos-stream-9` | dnf | firewalld | enforcing | 只在讲 Stream 定位时用 |
+| RHEL 系 | `bento/fedora-latest` | dnf | firewalld | enforcing | 跟最新内核与工具链，不做稳定基线 |
+| SUSE 系 | `bento/opensuse-leap-15` | zypper | firewalld | 可选（以 AppArmor 为主） | 只在一门课真讲到 SUSE 时启用 |
+| 独立 | `bento/amazonlinux-2023` | dnf | firewalld | enforcing | 需要与云上环境对齐时用 |
+| 不支持 | `bento/freebsd-13`、`-14` | pkg | pf | 无 | 无 systemd，Ansible 与 k3s 的假设全不成立 |
+
+`centos-stream-9` 之后没有 `-10`：bento 只发到 Stream 9（`bento/centos-stream-8` 还在，
+但已不是现役）。Ubuntu 不列 `25.04`：它是过渡版本，支持期只有 9 个月，不适合做课程基线。
+
+### 16.4 真正会绊倒人的只有三处
+
+多系统课容易写成"每条命令都写两遍"，实际 90% 内容是一样的。真正不同的只有三块：
+
+| # | 差异 | Debian 系 | RHEL 系 | 不处理的后果 |
+|---|---|---|---|---|
+| 1 | 装包 | `apt-get install -y` | `dnf install -y`（部分包要先 `dnf install -y epel-release`） | 第一章第一条命令就失败 |
+| 2 | 防火墙 | `ufw`（bento 上默认 inactive） | `firewalld`（**默认 active**） | k3s 的 6443 / 10250 / 8472 / 2379-2380 被挡，表现为"节点一直 NotReady"或 join 超时 |
+| 3 | SELinux | 无 | `enforcing` | k3s 挂载与容器卷失败，报错指向权限，实际是 LSM |
+
+模板对这三块的态度：
+
+- **不替课程解决**。写 `firewalld` 放行规则是**课程内容**（它正是这门课要教的），
+  模板不预置"通用防火墙角色"——那就是 §2.3 的 A1。
+- **模板只保证"起得来、连得上、装得上同一套工具"**：两个家族的 VM 用同一份
+  `platform/vm/baseline.sh` 断言干净，用同一套 `platform/linux/check.sh` 检查宿主。
+- **跨系课程的命令块必须标注执行节点**（写进 `conventions.md`）：单系课程不要求，
+  跨系课程强制，否则读者不知道这条命令该在哪台机器上敲。`gate.sh boxes` 在检测到
+  ≥ 2 个家族时提示这一点——提示，不改退出码。
+
+### 16.5 干净起点：`assert_absent` 与镜像探测
+
+"最小安装"在模板里的定义只有一个：**bento 的 minimal 基线 + 课程声明的缺席断言**。
+不做 ISO 手工安装，也不自制 box（§16.6）。
+
+`core/platform/vm/baseline.sh` 在 **VM 内**执行（由课程第一条 provision 或
+`verify.infra` 调用）：
+
+| 检查 | 命令 | 失败含义 |
+|---|---|---|
+| 缺席断言 | `command -v <name>` 必须非 0 | box 不是最小安装，或上次实验没清理干净 |
+| 发行版 | `cat /etc/os-release` 的 `PRETTY_NAME` | 记录家族，供文档核对 |
+| 内核 | `uname -r` | 与记录在案的 box 版本对得上 |
+
+默认**失败**（退出码 1），加 `--warn` 才降级为警告。理由很直接：预装了 `nginx`
+的镜像会让"从零安装 nginx"那一章从第一条命令起就是错的，而这种错误看起来像
+"配置没问题但行为不对"，最难查。
+
+镜像**实际版本**的落盘分两处：
+
+| 位置 | 内容 | 谁写 |
+|---|---|---|
+| `logs/vm-probe.txt` | `vagrant box list` 的对应行 + 每个 VM 的 `os-release` 首行 | `core/platform/vm/probe.sh`（宿主执行，走 `vagrant ssh`） |
+| `docs/architecture.md` 的"运行环境"表 | **一次真实样例** + 日期 + "版本会变"标注 | 作者手工抄一次 |
+
+第一处是运行时证据（`logs/` 在 `.gitignore` 里，不占仓库）；第二处是给人看的，
+允许过时——这正是"不钉版本"的配套（§16.6）。
+
+### 16.6 不钉版本，以及明确不支持的东西
+
+**不钉 box 版本**（这是对早前"钉版本"主张的收回）：
+
+- bento 按需重发，版本号就是构建日期（如 `202512.01.0`）。钉死意味着新学员要额外
+  下载几个 GB 的旧镜像，而且旧版本的下载不一定还在列表前面；
+- 钉版本解决的是"半年后行为漂移"，但模板的寿命以**门禁与规范**计，不以**镜像字节**计；
+- 配套做法是**记录实测版本**（§16.5 的第二处落盘），不是**约束版本**。
+
+出问题时回退，不需要新字段：
+
+```bash
+vagrant box add bento/ubuntu-24.04 --box-version 202510.26.0
+```
+
+本地只留这一个版本，Vagrant 就会用它——**回退是操作，不是配置**。
+
+明确不支持：
+
+| 项 | 为什么不支持 |
+|---|---|
+| 非 bento 镜像（官方 cloud image、第三方、自制） | 默认用户、Guest Additions、网络配置各不相同，等于为每个镜像写一套适配 |
+| ISO 手工最小安装 | 学员卡在分区与引导的概率远高于收益；"最小"已由 bento + `assert_absent` 覆盖 |
+| arm64（Apple Silicon） | 需要另一套验收矩阵，且 Windows 控制机方案本身是 amd64 假设 |
+| FreeBSD / Windows guest | 无 systemd，Ansible 与 k3s 的假设全不成立 |
+| 混用 provider（VMware / Parallels / libvirt） | C13 已把平台钉在 VirtualBox；多 provider 等于多一份平台层 |
+
+---
+
+## 17. 独立评审的 8 个问题与处置
 
 评审以"要照这份文档做计划的人"视角读了一遍，提出 8 个会逼出昂贵猜测的缺口。
-处置如下（前 7 条已写进上文，第 8 条是待你回答的问题）。
+处置如下（前 7 条已写进上文，第 8 条收窄为显式开关）。
 
 | # | 问题 | 处置 | 落在哪 |
 |---|---|---|---|
@@ -965,11 +1184,11 @@ Linux runner 上若装了 `pwsh`，额外做 `[ScriptBlock]::Create()` 语法解
 | 7 | 技能怎么"检测已安装"？ | 收窄为**只提示、永不改退出码** | §5.4 |
 | 8 | `--require-sections` 会误伤 README？ | 章节检查只作用于 `chapters.dir`；严格度由 `strict_sections` 显式开启 | §5.3、§8 |
 
-补充一行，避免读者误以为 §15 也过了这轮评审：
+补充一行，避免读者误以为 §15 与 §16 也过了这轮评审：
 
 | # | 情况 | 处置 |
 |---|---|---|
-| 9 | §15 跨平台设计**未经过独立评审** | 素材来自第一课已实施并验证的 Windows 方案（`docs/windows-ops-vm-design.md` + `win/`），不是新发明；但"泛化到模板"这一步只有本文档一次书面梳理，实施时按 P2/P3 的验收项逐步兜底（§15.14） |
+| 9 | §15 跨平台设计、§16 镜像与多系统**未经过独立评审** | §15 素材来自第一课已实施并验证的 Windows 方案（`docs/windows-ops-vm-design.md` + `win/`），不是新发明；§16 的 box 清单是查 Vagrant Cloud API 实测的，不是记忆。但"泛化到模板"这一步只有本文档一次书面梳理，实施时按 P2/P3 的验收项逐步兜底（§15.14、§16.5） |
 
 评审没有提、我也认为不值得展开的：`sed` vs jinja、`.course/` 命名、许可证、
 文档语言、章节空壳粒度。这些实施时随手定，改起来便宜。
