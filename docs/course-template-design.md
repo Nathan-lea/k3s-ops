@@ -212,7 +212,7 @@ course-template/
 │   ├── decisions.md
 │   ├── definition-of-done.md
 │   ├── architecture.md
-│   └── <chapters-dir>/            # 课程决定，如 docs/chapters/ 或 docs/k8s-tutorial/
+│   └── <chapters-dir>/            # 课程决定，默认 docs/chapters/
 ├── tests/
 ├── <profile 提供的额外目录>        # 如 vagrant/ ansible/
 └── logs/                          # gitignore
@@ -221,6 +221,9 @@ course-template/
 ### 4.4 `course.yml` 契约
 
 单一配置源（C3/C5/C6）。生成后仍然有效——它是**活配置**，不是一次性输入。
+
+下面是契约的**逐字段示例**，不是某个 profile 的完整输出：取值只用于说明字段怎么填。
+门禁只读结构、不读内容——**每个值都可以按课程改**，包括章节目录名与工具清单。
 
 ```yaml
 course:
@@ -301,13 +304,13 @@ privacy:
 
 # --- 章节 ----------------------------------------------------------
 chapters:
-  dir: "docs/k8s-tutorial"
+  dir: "docs/chapters"             # 课程自定，例如 docs/k8s-tutorial
   pattern: "{nn}-{title}.md"
   strict_sections: false           # 开始写正文后改 true，CI 才会校验小节非空
-  groups:                          # 章节大纲：只有标题，无正文
-    - 基础概念
-    - 架构全景
-    - 工作负载
+  groups:                          # 章节大纲：只有标题，无正文（种子值，按主题改）
+    - 准备环境
+    - 核心操作
+    - 故障排查
 ```
 
 **四条设计要点**：
