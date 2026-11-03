@@ -6,8 +6,8 @@
 
 | 项 | 值 |
 |---|---|
-| 状态 | 已评审（含独立评审 8 问处置），待批准实施 |
-| 日期 | 2026-11-02 |
+| 状态 | 待批准实施（8 问处置见 §16；§15 跨平台为新增，未独立评审） |
+| 日期 | 2026-11-03（初版 11-02，新增 §15 跨平台设计） |
 | 母项目 | `k3s-ops`（第一课，已完成，**不回填**） |
 | 产物仓库 | `course-template`（新建，独立） |
 | 目标用户 | 作者本人（后续课程）+ 克隆者 |
@@ -50,6 +50,7 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 | G4 | 模板可演进，老课程能同步 `core/` 更新 | `sync-template.sh` 能把 core 更新合入，且不碰课程内容 |
 | G5 | 复盘 §12.4 的七条改进全部落成机制 | §8 的对照表逐条有落点文件 |
 | G6 | k8s 与非 k8s 课程同一套模板 | 两个 profile 生成出的门禁行为完全一致 |
+| G7 | **Linux 桌面与 Windows 桌面学员都能完成全部实验**，虚拟机平台统一 VirtualBox | 两个 profile 各生成一次，`platform/` 齐备；Windows 侧只需 2 步；Linux 侧零额外步骤（§15） |
 
 ### 2.2 非目标
 
@@ -59,6 +60,8 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 - **不追求跨语言**。脚本用 bash + Python 3；配置解析用 **PyYAML**（与第一课一致，
   作为显式前置声明，见 §4.4，不做自制 YAML 解析器）。
 - **不做插件市场**。profile 就是目录，没有注册中心。
+- **不走 WSL2 / Docker Desktop 路线**。与 VirtualBox 互斥，见 §15.1（H3）。
+- **不给 Windows 写第二套命令**。只提供入口脚本与控制机，课程命令仍是一套（§15.3）。
 
 ### 2.3 反目标（技术上跑通也算失败）
 
@@ -87,6 +90,13 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 | C9 | 通用，k8s 与非 k8s 都能用 | "两种都有可能，能不能做成通用的" |
 | C10 | 保留模板来源，支持同步 | "留一条线" |
 | C11 | 不回填第一课 | "不回填应该是最好的吧" |
+| C12 | 学员机器是 **Linux 桌面 + Windows 桌面** | "学员使用的机器以 linux 桌面和 Windows 桌面为主" |
+| C13 | 虚拟机平台**统一 VirtualBox** | "统一使用 virtualBox 做为虚拟机平台" |
+| C14 | 两种桌面都要能**正常完成实验** | "要保证两种桌面的用户都能正常操作——就像当前项目一样" |
+
+C12–C14 的详细设计见 **§15 跨平台设计**。这是全篇最容易做浅的一块：
+只写"支持 Windows"等于没写，必须把换行、编码、权限、嵌套虚拟化这些
+真正会拦住学员的东西逐条落到文件上。
 
 C8 的四条红线是本模板的**存在理由**，§6 专门展开。
 
@@ -117,9 +127,21 @@ course-template/
 ├── core/                          # 逐字拷贝进生成物
 │   ├── AGENTS.md.tmpl             # 契约（流程分级 + 四条红线 + 单一事实源）
 │   ├── .gitignore
+│   ├── .gitattributes             # 换行规则（跨平台生死线，见 §15.9）
 │   ├── .githooks/pre-push         # → scripts/gate.sh --privacy
 │   ├── .github/workflows/gate.yml
 │   ├── .gitea/workflows/gate.yml
+│   ├── platform/                  # 平台适配层（与主题无关，见 §15）
+│   │   ├── README.md              # 平台矩阵 + 支持边界
+│   │   ├── linux/check.sh         # VirtualBox / vboxdrv / vboxusers / 网段 / 内存
+│   │   └── windows/               # 按 platforms.windows.mode 裁剪（见 §15.6）
+│   │       ├── check.ps1          # 管理员 / PS 版本 / Hyper-V / 网段 / 内存
+│   │       ├── up.ps1             # 前置检查 → vagrant up → 引导控制机
+│   │       ├── down.ps1
+│   │       ├── destroy.ps1
+│   │       ├── provision-control.sh   # 控制机引导（7 步，幂等）
+│   │       ├── emit.ps1           # UTF-8 无 BOM 写入工具函数
+│   │       └── guest/bin/<tool>   # 宿主专属命令的 shim
 │   ├── scripts/
 │   │   ├── gate.sh                # 统一门禁入口（privacy|docs|prereqs|all）
 │   │   ├── privacy-check.sh       # 8 条规则
@@ -166,6 +188,7 @@ course-template/
 ├── .course/
 │   ├── template-version           # 来源与版本（C10）
 │   └── core-manifest.txt          # core 文件哈希，供 sync 判断本地改动
+├── .gitattributes
 ├── .githooks/pre-push
 ├── .github/workflows/gate.yml
 ├── .gitea/workflows/gate.yml
@@ -202,20 +225,35 @@ tools:
     check: "git --version"
     install: "apt-get install -y git"
     required: true
+    where: host              # host | control | both（默认 both，见 §15.5）
   - name: python3
     min_version: "3.8"
     check: "python3 --version"
     install: "apt-get install -y python3"
     required: true
+    where: both
   - name: pyyaml           # 配置解析器：必须显式声明，不能假设系统已有
     min_version: "5.4"
     check: "python3 -c 'import yaml; print(yaml.__version__)'"
     install: "python3 -m pip install pyyaml"
     required: true
+    where: both
 
 skills:                    # agent 技能：仅提示，永不改变退出码
   required: [brainstorming, writing-plans]
   optional: [systematic-debugging]
+
+# --- C12/C13/C14 平台（完整字段见 §15.5） --------------------------
+platforms:
+  vm: virtualbox           # 固定，不允许改成别的
+  windows:
+    mode: control-node     # ssh-only | control-node
+    min_ps: "5.1"
+    control_node:
+      name: ops
+      memory: 1024
+  linux:
+    require_vboxusers: true
 
 # --- 单一事实源 ---------------------------------------------------
 facts:
@@ -254,7 +292,7 @@ chapters:
     - 工作负载
 ```
 
-**三条设计要点**：
+**四条设计要点**：
 
 1. **`verify` 拆成 `self` 与 `infra`**。`self` 是生成物自带、不依赖真实环境的自检
    （`gate.sh all`），保证"开箱即绿"（A2）；`infra` 是需要真实机器的那条，
@@ -265,6 +303,8 @@ chapters:
    **剖面仍然只有数据、没有逻辑**（§4.1 硬规则）。
 3. **`reason` 是结构化字段，不是 YAML 注释**。注释会被 `yaml.safe_load` 丢弃，
    也会被复制粘贴丢失；只有字段能进检查和报表。
+4. **`platforms` 是唯一允许描述"宿主"的块**。它只说"用什么虚拟机、Windows 要不要
+   控制机、控制机叫什么"，不说"Windows 上该跑什么命令"——命令永远只有一套（§15.3）。
 
 ---
 
@@ -483,12 +523,13 @@ generated_at: 2026-11-02
 
 | 项 | 值 |
 |---|---|
-| 工具 | `git`、`python3`（都 required） |
+| 工具 | `git`、`python3`、`pyyaml`（都 required，`where: both`） |
+| 平台 | `platforms.windows.mode: ssh-only`（Windows 只需 2 步，`vagrant ssh` 进 VM 敲命令） |
 | 事实源 | `docs/architecture.md` 的拓扑表（无独立配置文件） |
 | 验证 | `./scripts/gate.sh all` |
 | stub | 无 |
 | 章节目录 | `docs/chapters/` |
-| 额外目录 | 无 |
+| 额外目录 | `platform/`（只含 `windows/{check,up,down,destroy}.ps1` + `emit.ps1`） |
 
 用途：Docker、CI/CD、Shell 编程、监控这类"不需要固定拓扑"的课。
 
@@ -496,13 +537,14 @@ generated_at: 2026-11-02
 
 | 项 | 值 |
 |---|---|
-| 工具 | 上表 + `vagrant`、`ansible`、`kubectl`、`helm` |
+| 工具 | 上表 + `vagrant`、`ansible`、`kubectl`、`helm`（后四者 `where: host` 或 `control`，见 §15.5） |
+| 平台 | `platforms.windows.mode: control-node`（Windows 侧 3 台 VM：2 节点 + `ops` 控制机） |
 | 事实源 | `vagrant/nodes.yml` |
 | 验证 | `verify.self: ./scripts/gate.sh all`；`verify.infra` 由作者填（如 `./k3s-ops.sh status`） |
 | 白名单 | `privacy.derive.from: vagrant/nodes.yml`（`ip-like-scalars`） |
 | stub | `vagrant`、`ansible-playbook`、`kubectl` |
 | 章节目录 | `docs/k8s-tutorial/` |
-| 额外目录 | `vagrant/`、`ansible/`（空角色骨架） |
+| 额外目录 | `vagrant/`、`ansible/`（空角色骨架）、`platform/`（含 `provision-control.sh` 与 shim） |
 
 **从第一课抽什么、不抽什么**：
 
@@ -520,15 +562,16 @@ generated_at: 2026-11-02
 
 | 测试 | 覆盖 | 断言要点 |
 |---|---|---|
-| `test-generate.sh` | 每个 profile | 目录存在、无 `{{` 残留、三道门禁全绿、`git ls-files` 含 `tests/` |
+| `test-generate.sh` | 每个 profile × 每个 `windows.mode` | 目录存在、无 `{{` 残留、三道门禁全绿、`git ls-files` 含 `tests/`；`ssh-only` 下**不存在** `provision-control.sh` 与 shim |
 | `test-idempotent.sh` | 生成器 | 非空目标目录 → 拒绝且**不写入任何文件** |
 | `test-sync.sh` | 同步 | 老版本生成 → 模板升 MINOR → sync → `managed` 更新、`seed-only` 不变、`managed-region` 只换区域；本地改过 `managed` 则退出码 2 |
 | `test-privacy-gate.sh` | 隐私门禁 | 正例 0 / 反例 1 + 位置正确；**反例夹具建在临时目录**，且断言仓库内无违规文件 |
 | `test-docs-gate.sh` | 文档门禁 | 围栏奇数、表格错列、锚点失效各一个反例；`--sections` 不误伤 README |
-| `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令 |
+| `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错 |
 | `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`** |
+| `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；全仓库无 BOM；`git ls-files --eol` 索引换行正确；`nodes.windows.yml` 重新生成后 diff 为空；PS 静态合规（无 `??`/`?.`/`-Parallel`/`Set-Content`）；Linux 侧 check 脚本可在 CI 跑 |
 
-模板自己的 CI 跑这六个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
+模板自己的 CI 跑这八个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
 
 ---
 
@@ -537,13 +580,17 @@ generated_at: 2026-11-02
 | 阶段 | 产出 | 完成判据 |
 |---|---|---|
 | P0 | 仓库骨架、`course.yml` schema、`new-course.sh --dry-run` | 能打印"将要生成什么"，不落盘 |
-| P1 | `core/` 四道门禁 + 门禁自测 | `test-privacy-gate.sh` / `test-docs-gate.sh` 全绿 |
-| P2 | `generic` profile + 端到端生成 | `test-generate.sh generic` 全绿 |
-| P3 | `k8s-vagrant` profile | `test-generate.sh k8s-vagrant` 全绿 |
+| P1 | `core/` 四道门禁 + `.gitattributes` + BOM/换行校验 + 门禁自测 | `test-privacy-gate.sh` / `test-docs-gate.sh` / `test-platform.sh`（换行部分）全绿 |
+| P2 | `generic` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 端到端生成 | `test-generate.sh generic --mode ssh-only` 全绿；Linux 桌面手工走一遍 |
+| P3 | `k8s-vagrant` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`） | `test-generate.sh k8s-vagrant --mode control-node` 全绿；PS 静态合规 |
 | P4 | `sync-template.sh` + 版本策略 | `test-sync.sh` 全绿 |
 | P5 | CI（Gitea + GitHub）+ 模板自测进 CI | workflow 文件存在、两处 `gate.sh all` 等价、本地静态校验通过；**不要求真跑过**（§14） |
 
 **P2 是第一个真正的里程碑**：从这一阶段起，"生成一个能跑门禁的项目"这件事才成立。
+
+**平台工作不在独立阶段**，而是并进 P2（`ssh-only`）与 P3（`control-node`）——否则会得到"做完 P3 才发现平台层要返工"的顺序错误。
+
+Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、编码）**不属于任何阶段的完成判据**，它们只能标注"未验证"（§15.14）。把不可执行的事写进判据，等于给验收注水。
 
 ---
 
@@ -574,6 +621,9 @@ generated_at: 2026-11-02
 | CI 的真实执行 | 需要远程 + runner，属于环境而非模板（§14 已明确标注为未验证） |
 | 模板的迁移脚本 | `MAJOR` 变更时手工迁移，不写自动化——第一次 MAJOR 之前不知道要迁什么 |
 | 章节顺序正确性 | 大纲由作者负责，模板只检查文件存在 |
+| Windows 实机行为 | 模板作者没有 Windows 机器；只做静态合规 + 明确标注"未验证"（§15.14） |
+| 学员机器性能差异 | 只比较内存总量，不测实际 CPU/IO；拓扑可调，但调多少不管 |
+| VirtualBox 版本碎片 | 只要求 ≥ 7.0，不覆盖各发行版打包差异 |
 
 ---
 
@@ -595,7 +645,311 @@ generated_at: 2026-11-02
 
 ---
 
-## 15. 独立评审的 8 个问题与处置
+## 15. 跨平台设计（Linux 桌面 + Windows 桌面，VirtualBox）
+
+### 15.1 问题与四条硬约束
+
+第一课的结论不是"Windows 也能跑"，而是"**Windows 需要多一台机器**"。这一节把那条路泛化。
+
+四条硬约束都来自实测，不是推测：
+
+| # | 约束 | 后果 | 不能怎么做 |
+|---|---|---|---|
+| H1 | 课程命令是 bash + GNU 工具（`sed`/`awk`/`grep -P`/`install`/`chmod`） | Windows 原生跑不了 | 不写一套 PowerShell 等价实现：两份真相互相腐化 |
+| H2 | Ansible 控制节点官方只支持 POSIX；Vagrant 的 ansible provisioner 必须在**执行 vagrant 的那台机器**上找到 `ansible-playbook` | Windows 宿主当不了控制机 | 不把 Ansible 塞进 Windows |
+| H3 | VirtualBox 与 Hyper-V / WSL2 互斥 | 不能走 WSL2 曲线救国 | 不把 WSL2 写进前置条件 |
+| H4 | VirtualBox 不支持嵌套 VT-x | VM 里不能再跑 Vagrant | 不在 VM 里套 VM |
+
+H3 要单独说一句：WSL2 看着最省事（Windows 里自带 bash），但它要开 Hyper-V，而 Hyper-V 一开 VirtualBox 就退化成极慢的兼容模式，多数情况直接起不来。所以"支持 Windows"**不等于**"装个 WSL2"。
+
+结论与第一课一致：**Vagrant 留在宿主，课程命令留在 Linux。**
+
+### 15.2 三种平台形态
+
+模板不假设所有课程都需要 Ansible。按"课程命令在哪里执行"分三档：
+
+| 形态 | Linux 桌面 | Windows 桌面 | VM 数 | 典型课程 |
+|---|---|---|---|---|
+| A 原生 | 宿主即控制机，零额外步骤 | — | = 拓扑节点数 | 全部（Linux 侧永远走这条） |
+| B 直连 | 同 A | 宿主只 `vagrant up` + `vagrant ssh`，命令在课程 VM 里敲 | = 拓扑节点数 | Docker、Linux 基础、监控 |
+| C 控制机 | 同 A | 宿主造机器，另加一台 `role: ops` 控制机跑 Ansible | 节点数 + 1 | k8s-vagrant、Terraform + Ansible |
+
+形态是**嵌套**的：C 包含 B 的全部，B 包含 A 的全部。**Linux 侧永远是 A**，不可配置——这是固定行为，写进配置只为显式。
+
+可配置的只有 Windows 侧的一个字段：`platforms.windows.mode ∈ {ssh-only, control-node}`（分别对应 B 和 C）。
+
+判断标准一句话：**课程命令要在集群外执行吗？**
+
+- 不需要（`vagrant ssh` 进去敲就够）→ `ssh-only`，Windows 不必开第三台机器；
+- 需要（Ansible / kubectl / helm 在"外面"操作集群）→ `control-node`。
+
+`generic` 默认 `ssh-only`，`k8s-vagrant` 默认 `control-node`。
+
+### 15.3 五条核心原则
+
+1. **平台差异只允许出现在两个地方**：`core/platform/` 与 `.gitattributes`。`scripts/`、`docs/`、章节正文里出现 `if windows` 判分支，等同于违反 A1。
+2. **宿主只管机器，控制机只管命令**。Windows 宿主的职责只有三件：装 box、`vagrant up`、`vagrant ssh`。课程命令一律在 Linux 里执行，这样文档只需要一套命令。
+3. **差异收敛到副本**。控制机不在 `/vagrant` 共享目录里工作：vboxsf 挂载点是 0777，Ansible 会拒绝加载 `ansible.cfg`，私钥也没法 `chmod 600`。所以第一步就 `rsync -rlt` 到 `$HOME/<course>`，之后一切在副本里。
+4. **共享目录只做传输，不做工作目录**。`/vagrant` 只有两个用途：把仓库送进 VM、把宿主的私钥取出来。向它写入一律视为 bug。
+5. **事实源不复制两份**。Windows 需要多一台 `ops`、内存也要下调，但这些差异必须**生成**（§15.11），不能手抄一份 `nodes.windows.yml` 天天漂移——第一课在这里留了隐患。
+
+### 15.4 `core/platform/` 结构
+
+```
+core/platform/
+├── README.md                  # 平台矩阵 + 支持边界（写清"什么没验证"）
+├── linux/
+│   └── check.sh               # VirtualBox / vboxdrv / vboxusers / 网段 / 内存
+└── windows/
+    ├── check.ps1              # 管理员 / PS 版本 / Hyper-V / ssh / 路径 / 网段 / 内存
+    ├── up.ps1                 # 前置检查 → 自提权 → vagrant up → 引导控制机
+    ├── down.ps1
+    ├── destroy.ps1
+    ├── emit.ps1               # UTF-8 无 BOM 写入工具函数（被上面四个 dot-source）
+    ├── gen-nodes.py           # 事实源 + control_node → nodes.windows.yml
+    ├── provision-control.sh   # 控制机引导 7 步（仅 control-node）
+    └── guest/bin/<tool>       # 宿主专属命令的 shim（仅 control-node）
+```
+
+原则：**平台层不含任何课程知识**。它只认 `course.yml` 里的字段（`facts.source`、`tools[].where`、`platforms.*`），不知道 k3s 是什么。
+
+### 15.5 `course.yml` 的 `platforms` 块
+
+```yaml
+platforms:
+  vm: virtualbox                 # C13：固定值，不允许改成别的
+  windows:
+    mode: control-node           # ssh-only | control-node
+    min_ps: "5.1"                # 学员机器默认只有 5.1
+    control_node:
+      name: ops
+      cpus: 1
+      memory: 1024
+      path:                      # 写进 ~/.bashrc 与 /etc/profile.d/ 两份
+        - "$HOME/.local/bin"
+        - "$HOME/.venv/<course>/bin"
+      env:
+        - "ANSIBLE_CONFIG=$HOME/<course>/ansible/ansible.cfg"
+        - "KUBECONFIG=$HOME/<course>/kubeconfig"
+  linux:
+    require_vboxusers: true
+    kernel_module: vboxdrv
+    admin_needed: false          # 与 Windows 相反，文档要写明
+```
+
+`tools` 增加一个 `where` 字段，让"缺什么装什么"在两个平台都成立：
+
+```yaml
+tools:
+  - name: python3
+    where: both                  # 宿主与控制机都查
+  - name: vagrant
+    where: host                  # 只有宿主需要
+  - name: ansible
+    where: control               # 只装在控制机
+```
+
+`check-prereqs.sh` 按 `where` 与当前平台过滤：Linux 桌面查 `host` + `both`，控制机里查 `control` + `both`。默认值 `both`（不写不漏）。
+
+### 15.6 生成器按字段裁剪
+
+| 产物 | `ssh-only` | `control-node` |
+|---|---|---|
+| `platform/windows/check.ps1`、`up/down/destroy.ps1`、`emit.ps1` | ✓ | ✓ |
+| `platform/windows/provision-control.sh` | ✗ | ✓ |
+| `platform/windows/guest/bin/*`（shim） | ✗ | ✓ |
+| `platform/windows/gen-nodes.py` + `nodes.windows.yml` | 仅在拓扑需覆盖时 | ✓ |
+| README 的 Windows 段 | "2 步" | "2 步，其中第 2 步等控制机" |
+| `AGENTS.md` 契约的平台段 | 一句 | 完整段 |
+
+生成物里**没有**什么比有什么更能说明问题：`ssh-only` 里出现 `provision-control.sh` 就是生成器 bug，`test-generate.sh --mode` 会断言这一点。
+
+### 15.7 Linux 桌面：检查项与真实失败模式
+
+`platform/linux/check.sh` 只提示，`--strict` 才改退出码：
+
+| 检查 | 命令 | 失败时给什么 |
+|---|---|---|
+| VirtualBox ≥ 7.0 | `VBoxManage --version` | Oracle 官方仓库的安装命令（发行版自带的太旧） |
+| `vboxdrv` 已加载 | `lsmod` 里出现 `vboxdrv` | `sudo modprobe vboxdrv`；Secure Boot 需注册 MOK；内核升级后 `sudo /sbin/vboxconfig` |
+| 用户在 `vboxusers` | `id -nG` 含 `vboxusers` | `sudo usermod -aG vboxusers "$USER"`，然后**重新登录** |
+| Vagrant ≥ 2.4 | `vagrant --version` | HashiCorp 仓库地址（发行版包通常是 2.2） |
+| 网段未被占用 | `ip -4 addr` 匹配 subnet | 提示改事实源里的 subnet |
+| 内存 ≥ 拓扑总和 + 2GB | `free -g` | 提示下调节点内存 |
+
+Linux 侧**不需要管理员权限**（进 `vboxusers` 组即可），与 Windows 正好相反。文档要写明，否则学员会习惯性 `sudo` 一切，把文件所有者搞乱。
+
+### 15.8 Windows 桌面：真正会拦住人的七件事
+
+这一节才是"支持 Windows"的实质内容，每一条都在第一课踩过。
+
+| # | 问题 | 机制 |
+|---|---|---|
+| 1 | PowerShell 版本 | 只用 **5.1** 有的语法：不用 `??`、`?.`、`-Parallel`、`ConvertFrom-Json -AsHashtable`。`check.ps1` 读 `$PSVersionTable.PSVersion`，过低直接报错 |
+| 2 | 管理员权限 | host-only 网卡必须管理员。`up.ps1` 先 `Test-Admin`，不是就 `Start-Process -Verb RunAs` 自提权，父进程 `exit 0`（否则会执行两遍） |
+| 3 | Hyper-V / WSL2 | `HypervisorPresent` 为真时**阻断**，给 `bcdedit /set hypervisorlaunchtype off` + 重启的指引。不是警告——放行只会得到"`vagrant up` 卡在 0%" |
+| 4 | 默认编码 | PS 5.1 的 `Set-Content` / `Out-File` 默认 UTF-16LE 且带 BOM，写出的 YAML 与 kubeconfig 立刻报废。统一走 `emit.ps1`：`[IO.File]::WriteAllText($p, $s, (New-Object Text.UTF8Encoding $false))` |
+| 5 | 中文乱码 | 启动时 `[Console]::OutputEncoding = [Text.Encoding]::UTF8`；脚本输出不带 emoji（GBK 控制台会炸） |
+| 6 | 没有 `ssh` | `vagrant ssh` 依赖系统 OpenSSH 客户端。`check.ps1` 查 `Get-Command ssh`，缺失时给"设置 → 应用 → 可选功能"的路径 |
+| 7 | 路径含空格或中文 | Vagrantfile 与 Ansible 的引号会出问题。`check.ps1` 检测仓库根路径，含空格则建议换到 `C:\work\<course>` |
+
+第 4 条单列的原因：第一课排查最久的就是它。生成的 kubeconfig 前面多两个字节，`kubectl` 报 `error loading config file: yaml: invalid trailing UTF-8 octet`，看起来像网络问题，实际是编码问题。
+
+### 15.9 换行与编码：`.gitattributes` 是生死线
+
+没有 `.gitattributes` 时，Windows 上 `git clone` 会把 `core.autocrlf=true`（Git for Windows 默认）套到所有文本文件，`*.sh` 变成 CRLF。表现出来是：
+
+```
+bash: ./scripts/gate.sh: /usr/bin/env: bad interpreter: No such file or directory
+```
+
+或者 `bash: '\r': command not found`。这类错误学员极难自查，所以必须在仓库里钉死：
+
+```gitattributes
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.j2        text eol=lf
+Vagrantfile text eol=lf
+*.md        text eol=lf
+
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+*.png binary
+*.jpg binary
+```
+
+两道校验进 `gate.sh`（都属于"文件卫生"，放在 docs 门禁里跑）：
+
+| 检查 | 断言 | 为什么必需 |
+|---|---|---|
+| BOM | 任何被跟踪的文本文件首三字节不是 `EF BB BF` | BOM 让 shebang 失效，让 YAML 首键名带上 `\ufeff` |
+| 索引换行 | `git ls-files --eol`：`*.sh/*.py/*.yml` 的 index 为 `lf`，`*.ps1` 为 `crlf` | 有人在 Windows 上改完直接提交时，`.gitattributes` 不一定救得回来 |
+
+`git ls-files --eol` 报的是**索引**状态，所以本地与 CI 都成立；这也是唯一能自动发现"某文件被 CRLF 污染"的办法。
+
+### 15.10 控制机引导：7 步，幂等
+
+`platform/windows/provision-control.sh`（仅 `control-node`）。由 `up.ps1` 通过 `vagrant ssh` 调用，也可手动重跑。
+
+| 步 | 做什么 | 幂等判据 |
+|---|---|---|
+| 1 | 基线包（`python3-venv`、`rsync`、`curl`、`openssh-client`） | `dpkg -s` |
+| 2 | 仓库副本 `rsync -rlt` 到 `$HOME/<course>` | 每次重跑（用 `-rlt` 而非 `-a`：vboxsf 不支持改属主） |
+| 3 | 注入平台拓扑（`gen-nodes.py` 的产物覆盖副本里的事实源） | 每次重跑 |
+| 4 | 私钥 `.vagrant/machines/<host>/virtualbox/private_key` → `~/.ssh/<course>/<host>`，`chmod 600` | 存在则跳过 |
+| 5 | 派生事实（inventory、shim 映射），由 `facts.derived` 声明 | 内容比对 |
+| 6 | `tools` 里 `where: control` 的安装（Ansible、kubectl、helm…） | 每项自带 `check` 命令 |
+| 7 | 控制机环境变量（`~/.bashrc` **与** `/etc/profile.d/` 各一份）+ shim 安装 | 内容比对 |
+
+第 7 步写两份不是冗余：`vagrant ssh -c` 与 `ssh host cmd` 都是**非交互 shell**，不读 `~/.bashrc`。第一课只写了 `.bashrc`，结果 `up.ps1 -Install` 的第二条命令找不到 `ansible-playbook`。
+
+**Ansible 版本必须钉**：Ubuntu 22.04 的控制机 Python 是 3.10，`ansible-core` 2.18+ 要求 3.11+。所以写 `ansible-core>=2.16,<2.18`，不要裸写 `ansible-core`。
+
+### 15.11 拓扑不复制两份
+
+第一课的 `win/nodes.windows.yml` 是手抄的（多了 `ops` 节点、agent 内存 4096→2048），与 `vagrant/nodes.yml` 靠注释"保持一致"。**这是缺陷，不能带进模板。**
+
+模板做法是单向往生成：
+
+```
+facts.source（course.yml 指定）
+      │  gen-nodes.py（事实源 + platforms.windows.control_node）
+      ▼
+platform/windows/nodes.windows.yml    （生成物，入库，只读，头注释写 generated / do not edit）
+```
+
+- 生成时写一次；
+- `gate.sh parity` 用同样输入重新生成，**diff 非空即失败**，提示跑 `scripts/gen-platform.sh`；
+- 作者与学员都不手改这个文件。
+
+这样"加一个 agent 节点"只改事实源一处，Windows 侧不会漏——顺带把第一课"两份拓扑各自演进"的隐患消掉。
+
+### 15.12 `vagrant` shim 的边界
+
+控制机里没有 Vagrant（也不该有，H4），但课程脚本会调 `vagrant ssh` / `vagrant up`，所以控制机要装一个 `vagrant` shim。
+
+泛化后的契约——shim **只实现查询与连接，一律拒绝造机器与销毁**：
+
+| 调用 | shim 行为 |
+|---|---|
+| `vagrant ssh <node> [-- cmd]` | `exec ssh`：TTY、stdin 管道、退出码原样透传 |
+| `vagrant ssh -c <cmd>` | 同上 |
+| `vagrant ssh-config <node>` | 打印等价 SSH 配置 |
+| `vagrant up` / `halt` / `suspend` / `destroy` / `status` | 打印"回 Windows 执行"的指引，**退出码 2** |
+| 其他 | 退出码 2 |
+
+两个实现细节是踩出来的：
+
+- **`-t` 只在交互时加**。`vagrant ssh node -- "sudo bash -s" < file` 是管道，加了 `-t` 会让 `sudo` 等 TTY 而挂死。
+- **用 `os.execvp` 而不是 `subprocess`**。否则 stdin 管道与信号转发不可靠，`status` 里的 `sudo bash -s` 会读到空输入。
+
+shim 只读 `~/.<course>-shim.json`（第 5 步生成），不解析 Vagrantfile——那是宿主的事。
+
+### 15.13 文档怎么写：一套命令，两种桌面
+
+这是"两种桌面都能正常操作"落到文字上的部分。规则四条：
+
+1. **命令只有一套**，全是 Linux 命令。不写"Windows 用 `dir`、Linux 用 `ls`"这种对照表。
+2. **平台差异只出现在"入口"**，放在每章统一位置（`docs/conventions.md` 规定格式）。
+3. **对外访问地址只写"宿主可达"的那一个**（端口转发端口，从拓扑的 `port_forwards` 派生），不写"Linux 用 30443、Windows 用 8443"。
+4. **正文不出现 Windows 路径**（`C:\...`）。`check-docs.py` 命中即提示——正文出现反斜杠路径，说明作者开始写平台分支了。
+
+"入口"块的标准形态：
+
+```markdown
+> **入口（只做一次）**
+> - Linux 桌面：`./platform/linux/check.sh && ./scripts/gate.sh all`
+> - Windows 桌面：`powershell -ExecutionPolicy Bypass -File .\platform\windows\up.ps1 -Install`
+>
+> 之后的命令两种桌面**完全相同**，都在 Linux 里执行。
+```
+
+### 15.14 验证矩阵：哪些能验，哪些只能承认
+
+延续 §14 的口径，把"能验"与"只能承认"分开摆：
+
+| 项 | Linux 上可验证 | 只能 Windows 实机 | 状态 |
+|---|---|---|---|
+| `.gitattributes` 覆盖 + BOM + 索引换行 | ✓（`git ls-files --eol`） | — | P1 进 `gate.sh` |
+| 生成器三档裁剪 | ✓（`test-generate.sh --mode`） | — | P2 / P3 |
+| `platform/linux/check.sh` | ✓ | — | P2 |
+| PS 静态合规（无 `??`、无 `Set-Content`、无 BOM） | ✓（`test-platform-parity.sh`） | — | P3 |
+| `up.ps1` 全流程（自提权、host-only 网卡、`vagrant up`） | ✗ | ✓ | **未验证** |
+| shim 的 TTY / stdin / 退出码透传 | 部分（在 Linux 里直接跑 shim） | ✓（真实 `vagrant ssh -c`） | 部分 |
+| Windows 宿主访问 NodePort | ✗ | ✓ | **未验证** |
+| PS 5.1 的真实编码行为 | ✗（Linux 只有 pwsh 7） | ✓ | **未验证** |
+
+Linux runner 上若装了 `pwsh`，额外做 `[ScriptBlock]::Create()` 语法解析；没装就**标注 skipped —— skipped 不等于 passed**。
+
+"未验证"三格必须写进生成物 `CHANGELOG.md` 的 Unreleased 区，格式固定：
+
+```
+- [未验证] Windows 桌面全流程：设计见 docs/course-template-design.md §15，待 Windows 实机确认
+```
+
+这是第一课"诚实边界"的复用：**没跑过就说没跑过，不能因为"逻辑上应该行"就勾掉。**
+
+### 15.15 反目标
+
+| # | 反目标 | 为什么是失败 |
+|---|---|---|
+| P1 | 给 Windows 写一套 PowerShell 版课程命令 | 两份真相互相腐化，最终只有一份是新的 |
+| P2 | 走 WSL2 省掉第三台机器 | 与 VirtualBox 互斥（H3），学员卡在"虚拟机打不开" |
+| P3 | 在 VM 里跑 Vagrant | 无嵌套 VT-x（H4），报错信息还看不懂 |
+| P4 | 平台差异散布在 `scripts/` 里 | 等价于 A1，第三个平台进来时无处下刀 |
+| P5 | 控制机直接工作于 `/vagrant` | 0777 挂载 → Ansible 拒绝加载配置、私钥无法 600，症状叫"权限错误"而不是"共享目录" |
+| P6 | 只支持 Linux，文档加一句"Windows 请自行解决" | 等于没做 C12–C14 |
+
+---
+
+## 16. 独立评审的 8 个问题与处置
 
 评审以"要照这份文档做计划的人"视角读了一遍，提出 8 个会逼出昂贵猜测的缺口。
 处置如下（前 7 条已写进上文，第 8 条是待你回答的问题）。
@@ -610,6 +964,12 @@ generated_at: 2026-11-02
 | 6 | "CI 绿"到底要不要真跑？ | **已定：A（文件级）**，并明确标注"CI 尚未真跑过" | §14 |
 | 7 | 技能怎么"检测已安装"？ | 收窄为**只提示、永不改退出码** | §5.4 |
 | 8 | `--require-sections` 会误伤 README？ | 章节检查只作用于 `chapters.dir`；严格度由 `strict_sections` 显式开启 | §5.3、§8 |
+
+补充一行，避免读者误以为 §15 也过了这轮评审：
+
+| # | 情况 | 处置 |
+|---|---|---|
+| 9 | §15 跨平台设计**未经过独立评审** | 素材来自第一课已实施并验证的 Windows 方案（`docs/windows-ops-vm-design.md` + `win/`），不是新发明；但"泛化到模板"这一步只有本文档一次书面梳理，实施时按 P2/P3 的验收项逐步兜底（§15.14） |
 
 评审没有提、我也认为不值得展开的：`sed` vs jinja、`.course/` 命名、许可证、
 文档语言、章节空壳粒度。这些实施时随手定，改起来便宜。
