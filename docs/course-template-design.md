@@ -44,7 +44,7 @@ Docker 课、CI/CD 课、Terraform 课，它们的默认值必然分叉。放进
 
 | # | 目标 | 可验证判据 |
 |---|---|---|
-| G1 | 一条命令生成新课程仓库，含完整骨架 | `new-course.sh ../demo --profile generic` 成功，且生成物门禁全绿 |
+| G1 | 一条命令生成新课程仓库，含完整骨架 | `new-course.sh ../demo --profile minimal` 成功，且生成物门禁全绿 |
 | G2 | 生成即自带门禁（隐私 / 文档 / 前置条件 / 镜像） | 生成结束时四道检查都跑过且退出码 0 |
 | G3 | 规范只写一份，所有课程强制一致 | 规范文件全部在 `core/`，`profiles/` **不含**任何规范 |
 | G4 | 模板可演进，老课程能同步 `core/` 更新 | `sync-template.sh` 能把 core 更新合入，且不碰课程内容 |
@@ -120,6 +120,9 @@ C8 的四条红线是本模板的**存在理由**，§6 专门展开。
 **硬规则**：`profiles/` 只提供**数据**（YAML + 目录 + 文件），不提供**逻辑**（脚本）。
 剖面里出现 `*.sh` 就是设计违规，模板自测会断言这一点。
 
+剖面名按**形状**取（`minimal` / `multi-vm`），不按主题取——否则第三门课就会为了
+"像 k8s 那样"再长一个剖面出来（§9 开头）。
+
 ### 4.2 模板仓库结构
 
 ```
@@ -173,11 +176,11 @@ course-template/
 │       └── test-docs-gate.sh      # 文档校验正反例
 │
 ├── profiles/
-│   ├── generic/                   # 最小剖面：git + python3
+│   ├── minimal/                   # 形状：单机；工具只要 git + python3
 │   │   ├── course.yml
 │   │   ├── chapters/              # 章节大纲（只有标题，无正文）
 │   │   └── files/                 # 额外目录骨架
-│   └── k8s-vagrant/               # 从第一课**抽结构**，不含教程正文
+│   └── multi-vm/                  # 形状：多台 VM + 配置管理（结构抽自第一课）
 │       ├── course.yml
 │       ├── stubs/{vagrant,ansible-playbook,kubectl}
 │       ├── chapters/
@@ -209,7 +212,7 @@ course-template/
 │   ├── decisions.md
 │   ├── definition-of-done.md
 │   ├── architecture.md
-│   └── <chapters-dir>/            # 剖面决定，如 docs/chapters/ 或 docs/k8s-tutorial/
+│   └── <chapters-dir>/            # 课程决定，如 docs/chapters/ 或 docs/k8s-tutorial/
 ├── tests/
 ├── <profile 提供的额外目录>        # 如 vagrant/ ansible/
 └── logs/                          # gitignore
@@ -227,7 +230,7 @@ course:
   language: "zh"
   audience: ""             # 写给谁看（影响措辞与深度）
 
-profile: generic
+profile: multi-vm
 
 # --- C6 前置条件 -------------------------------------------------
 tools:
@@ -468,7 +471,7 @@ gate.sh all        # 全跑（CI 用）
 ```yaml
 template: course-template
 version: 0.1.0
-profile: generic
+profile: multi-vm
 sha: <生成时模板仓库的短哈希>
 generated_at: 2026-11-02
 ```
@@ -538,7 +541,17 @@ generated_at: 2026-11-02
 
 ## 9. Profile 规格
 
-### 9.1 `generic`（最小可用）
+**命名按形状，不按主题**。剖面名只描述"生成出来的项目骨架有多重"，不描述课程讲什么：
+
+| 剖面 | 主轴 | 典型课程 |
+|---|---|---|
+| `minimal` | 单台 VM、无配置管理 | Docker、CI/CD、Shell、监控 |
+| `multi-vm` | 多台 VM + 配置管理 + 控制机 | k8s、Terraform + Ansible、Swarm |
+
+主题**只出现在值里**（`chapters.dir`、`tools`、stub 清单），不出现在名字里。
+否则第一门 Docker 课会想"照 k8s 那个再来一份"，剖面就会按主题繁殖（A1）。
+
+### 9.1 `minimal`（最小可用）
 
 | 项 | 值 |
 |---|---|
@@ -553,7 +566,7 @@ generated_at: 2026-11-02
 
 用途：Docker、CI/CD、Shell 编程、监控这类"不需要固定拓扑"的课。
 
-### 9.2 `k8s-vagrant`（参考剖面）
+### 9.2 `multi-vm`（多台 VM + 配置管理，参考剖面）
 
 | 项 | 值 |
 |---|---|
@@ -564,8 +577,12 @@ generated_at: 2026-11-02
 | 验证 | `verify.self: ./scripts/gate.sh all`；`verify.infra` 由作者填（如 `./k3s-ops.sh status`） |
 | 白名单 | `privacy.derive.from: vagrant/nodes.yml`（`ip-like-scalars`） |
 | stub | `vagrant`、`ansible-playbook`、`kubectl` |
-| 章节目录 | `docs/k8s-tutorial/` |
+| 章节目录 | `docs/chapters/`（种子大纲偏 k8s，按主题改） |
 | 额外目录 | `vagrant/`、`ansible/`（空角色骨架）、`platform/`（含 `provision-control.sh` 与 shim） |
+
+**名字不是承诺**：`multi-vm` 只说"有多台 VM 和配置管理"，不保证工具清单里的
+`kubectl` / `helm` / 章节大纲适合你的主题。它们都是**种子值**：生成时写一次，
+作者按课程删改——剖面是起点，不是约束（§4.4 的"活配置"）。
 
 **从第一课抽什么、不抽什么**：
 
@@ -589,7 +606,7 @@ generated_at: 2026-11-02
 | `test-privacy-gate.sh` | 隐私门禁 | 正例 0 / 反例 1 + 位置正确；**反例夹具建在临时目录**，且断言仓库内无违规文件 |
 | `test-docs-gate.sh` | 文档门禁 | 围栏奇数、表格错列、锚点失效各一个反例；`--sections` 不误伤 README |
 | `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错 |
-| `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`** |
+| `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`**；目录名必须在白名单内（`minimal` / `multi-vm`），新增剖面要走设计决策，不能顺手按主题加 |
 | `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；全仓库无 BOM；`git ls-files --eol` 索引换行正确；`nodes.windows.yml` 重新生成后 diff 为空；PS 静态合规（无 `??`/`?.`/`-Parallel`/`Set-Content`）；Linux 侧 check 脚本可在 CI 跑 |
 | `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；`assert_absent` 命中已装命令 → 退出码 1（用临时目录里的假可执行文件构造，不建 VM） |
 
@@ -603,8 +620,8 @@ generated_at: 2026-11-02
 |---|---|---|
 | P0 | 仓库骨架、`course.yml` schema、`new-course.sh --dry-run` | 能打印"将要生成什么"，不落盘 |
 | P1 | `core/` 门禁（隐私 / 文档 / 前置条件）+ `.gitattributes` + BOM/换行校验 + 门禁自测 | `test-privacy-gate.sh` / `test-docs-gate.sh` / `test-platform.sh`（换行部分）全绿 |
-| P2 | `generic` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 镜像清单与 `assert_absent` + 端到端生成 | `test-generate.sh generic --mode ssh-only` 全绿；`test-boxes.sh` 全绿；Linux 桌面手工走一遍 |
-| P3 | `k8s-vagrant` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`）+ 节点级 `box:` 覆盖 | `test-generate.sh k8s-vagrant --mode control-node` 全绿；PS 静态合规；两家族并存的拓扑能过 `gate.sh boxes` |
+| P2 | `minimal` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 镜像清单与 `assert_absent` + 端到端生成 | `test-generate.sh minimal --mode ssh-only` 全绿；`test-boxes.sh` 全绿；Linux 桌面手工走一遍 |
+| P3 | `multi-vm` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`）+ 节点级 `box:` 覆盖 | `test-generate.sh multi-vm --mode control-node` 全绿；PS 静态合规；两家族并存的拓扑能过 `gate.sh boxes` |
 | P4 | `sync-template.sh` + 版本策略 | `test-sync.sh` 全绿 |
 | P5 | CI（Gitea + GitHub）+ 模板自测进 CI | workflow 文件存在、两处 `gate.sh all` 等价、本地静态校验通过；**不要求真跑过**（§14） |
 
@@ -633,7 +650,7 @@ Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、�
 | `series` 名 | `devops-self-study` | 与第一课定位一致，改起来只是字符串 |
 | `--no-git` | 支持 | 在已有仓库里生成是真实需求，成本 5 行 |
 | 示例章节 | **不附带** | 模板里出现课程正文就违反 §2.2；八段式靠 `conventions.md` 说明 |
-| 默认镜像 | `bento/ubuntu-24.04` | 24.04 LTS 标准支持到 2029-04，覆盖整个系列；代价是第一课的实测结论在 22.04 上取得，`k8s-vagrant` 首次真机跑要在 24.04 上复核（§16.1） |
+| 默认镜像 | `bento/ubuntu-24.04` | 24.04 LTS 标准支持到 2029-04，覆盖整个系列；代价是第一课的实测结论在 22.04 上取得，`multi-vm` 首次真机跑要在 24.04 上复核（§16.1） |
 | `boxes.yml` 存什么 | 只存家族 / 包管理 / 防火墙 / SELinux，**不存版本** | 版本随构建滚动，存了就要长期跟着改；实测版本记在 README，允许过时（§16.6） |
 
 ---
@@ -704,7 +721,7 @@ H3 要单独说一句：WSL2 看着最省事（Windows 里自带 bash），但�
 |---|---|---|---|---|
 | A 原生 | 宿主即控制机，零额外步骤 | — | = 拓扑节点数 | 全部（Linux 侧永远走这条） |
 | B 直连 | 同 A | 宿主只 `vagrant up` + `vagrant ssh`，命令在课程 VM 里敲 | = 拓扑节点数 | Docker、Linux 基础、监控 |
-| C 控制机 | 同 A | 宿主造机器，另加一台 `role: ops` 控制机跑 Ansible | 节点数 + 1 | k8s-vagrant、Terraform + Ansible |
+| C 控制机 | 同 A | 宿主造机器，另加一台 `role: ops` 控制机跑 Ansible | 节点数 + 1 | multi-vm、Terraform + Ansible |
 
 形态是**嵌套**的：C 包含 B 的全部，B 包含 A 的全部。**Linux 侧永远是 A**，不可配置——这是固定行为，写进配置只为显式。
 
@@ -715,7 +732,7 @@ H3 要单独说一句：WSL2 看着最省事（Windows 里自带 bash），但�
 - 不需要（`vagrant ssh` 进去敲就够）→ `ssh-only`，Windows 不必开第三台机器；
 - 需要（Ansible / kubectl / helm 在"外面"操作集群）→ `control-node`。
 
-`generic` 默认 `ssh-only`，`k8s-vagrant` 默认 `control-node`。
+`minimal` 默认 `ssh-only`，`multi-vm` 默认 `control-node`。
 
 ### 15.3 五条核心原则
 
@@ -1021,7 +1038,7 @@ Linux runner 上若装了 `pwsh`，额外做 `[ScriptBlock]::Create()` 语法解
 systemd 行为）是在 **22.04** 上得到的。模板默认改为 24.04 之后：
 
 - `22.04` 仍留在允许清单里，需要精确对齐第一课的老课程可以按节点写 `box: bento/ubuntu-22.04`；
-- `k8s-vagrant` 剖面第一次真机跑必须在 **24.04** 上复核，不能把第一课的结论直接搬过来；
+- `multi-vm` 剖面第一次真机跑必须在 **24.04** 上复核，不能把第一课的结论直接搬过来；
 - 复核前，它和 §15.14 的 Windows 项一样属于"未验证"——**没跑过就说没跑过**。
 
 **为什么不"支持所有 box"**：每多支持一类镜像，就多一组"默认用户 / Guest Additions 版本 /
