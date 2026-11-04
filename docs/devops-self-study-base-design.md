@@ -1,6 +1,6 @@
 # 课程项目模板设计
 
-> 目标产物：一个**独立 git 仓库** `course-template`，供克隆后生成新的独立课程项目。
+> 目标产物：一个**独立 git 仓库** `devops-self-study-base`，供克隆后生成新的独立课程项目。
 >
 > 本文是设计文档，不是操作手册。实施计划另出。
 
@@ -9,7 +9,7 @@
 | 状态 | 待批准实施（8 问处置见 §17；§15 跨平台、§16 镜像方案均为新增，未独立评审） |
 | 日期 | 2026-11-03（初版 11-02，新增 §15 跨平台、§16 镜像与多系统） |
 | 母项目 | `k3s-ops`（第一课，已完成，**不回填**） |
-| 产物仓库 | `course-template`（新建，独立） |
+| 产物仓库 | `devops-self-study-base`（新建，独立） |
 | 目标用户 | 作者本人（后续课程）+ 克隆者 |
 
 ---
@@ -126,7 +126,7 @@ C8 的四条红线是本模板的**存在理由**，§6 专门展开。
 ### 4.2 模板仓库结构
 
 ```
-course-template/
+devops-self-study-base/
 ├── README.md                      # 三条命令上手
 ├── LICENSE                        # MIT
 ├── VERSION                        # 语义化版本
@@ -472,7 +472,7 @@ gate.sh all        # 全跑（CI 用）
 `.course/template-version`：
 
 ```yaml
-template: course-template
+template: devops-self-study-base
 version: 0.1.0
 profile: multi-vm
 sha: <生成时模板仓库的短哈希>
@@ -497,7 +497,7 @@ generated_at: 2026-11-02
 
 ### 7.3 同步语义
 
-`scripts/sync-template.sh /path/to/course-template`：
+`scripts/sync-template.sh /path/to/devops-self-study-base`：
 
 ```
 ① 读 .course/template-version，确认模板版本
@@ -1002,7 +1002,7 @@ Linux runner 上若装了 `pwsh`，额外做 `[ScriptBlock]::Create()` 语法解
 "未验证"三格必须写进生成物 `CHANGELOG.md` 的 Unreleased 区，格式固定：
 
 ```
-- [未验证] Windows 桌面全流程：设计见 docs/course-template-design.md §15，待 Windows 实机确认
+- [未验证] Windows 桌面全流程：设计见模板仓库 docs/design.md §15，待 Windows 实机确认
 ```
 
 这是第一课"诚实边界"的复用：**没跑过就说没跑过，不能因为"逻辑上应该行"就勾掉。**
