@@ -131,13 +131,20 @@ devops-self-study-base/
 ├── LICENSE                        # MIT
 ├── VERSION                        # 语义化版本
 ├── CHANGELOG.md
-├── new-course.sh                  # 生成器
+├── new-course.sh                  # 生成入口（薄壳，转调 lib/gen.py）
+├── .gitattributes                 # 换行规则（跨平台生死线，见 §15.9；生成时拷进生成物根）
+├── .gitignore
+├── .privacy-allow.yml             # 模板仓库自用白名单，逐条带 reason
 │
-├── core/                          # 逐字拷贝进生成物
+├── lib/                           # 模板私有，不进生成物
+│   ├── course_schema.py           # course.yml 契约校验 + 默认值
+│   └── gen.py                     # 渲染 / 写盘 / core-manifest / git init
+│
+├── core/                          # 渲染后成为生成物根（core/ 前缀去掉）
 │   ├── AGENTS.md.tmpl             # 契约（流程分级 + 四条红线 + 单一事实源）
-│   ├── .gitignore
-│   ├── .gitattributes             # 换行规则（跨平台生死线，见 §15.9）
-│   ├── .githooks/pre-push         # → scripts/gate.sh --privacy
+│   ├── README.md.tmpl             # 生成物 README 模板
+│   ├── CHANGELOG.md.tmpl          # 生成物 CHANGELOG 种子（含未验证条目）
+│   ├── .githooks/pre-push         # → scripts/gate.sh privacy
 │   ├── .github/workflows/gate.yml
 │   ├── .gitea/workflows/gate.yml
 │   ├── platform/                  # 平台适配层（与主题无关，见 §15）
@@ -149,55 +156,63 @@ devops-self-study-base/
 │   │   ├── linux/check.sh         # VirtualBox / vboxdrv / vboxusers / 网段 / 内存
 │   │   └── windows/               # 按 platforms.windows.mode 裁剪（见 §15.6）
 │   │       ├── check.ps1          # 管理员 / PS 版本 / Hyper-V / 网段 / 内存
-│   │       ├── up.ps1             # 前置检查 → vagrant up → 引导控制机
+│   │       ├── up.ps1             # 前置检查 → vagrant up（control-node 档再加引导）
 │   │       ├── down.ps1
 │   │       ├── destroy.ps1
-│   │       ├── provision-control.sh   # 控制机引导（7 步，幂等）
 │   │       ├── emit.ps1           # UTF-8 无 BOM 写入工具函数
-│   │       └── guest/bin/<tool>   # 宿主专属命令的 shim
+│   │       └── (P3+) provision-control.sh / guest/bin/<tool>   # 仅 control-node 档
 │   ├── scripts/
-│   │   ├── gate.sh                # 统一门禁入口（privacy|docs|prereqs|boxes|all）
-│   │   ├── privacy-check.sh       # 8 条规则
-│   │   ├── check-boxes.sh         # 镜像允许清单 + 家族统计（§16.2）
+│   │   ├── gate.sh                # 统一门禁入口（privacy|docs|prereqs|boxes|redlines|all）
+│   │   ├── privacy-check.sh       # 8 条规则（bash 壳）
+│   │   ├── privacy_scan.py        # 扫描实现
 │   │   ├── check-docs.py          # 围栏/表格/锚点/跳级/编码/行尾
-│   │   ├── check-prereqs.sh       # 读 course.yml，缺工具给安装命令
+│   │   ├── check-prereqs.sh       # 读 course.yml，缺工具给安装命令（bash 壳）
+│   │   ├── check_prereqs.py       # 版本解析与比较
+│   │   ├── check-boxes.sh         # 镜像允许清单 + 家族统计（§16.2，bash 壳）
+│   │   ├── check_boxes.py         # 允许清单与跨系判断
 │   │   ├── gen-stats.py           # 规模数字自动化
-│   │   └── sync-template.sh       # 同步 core 更新（G4）
+│   │   └── (P4) sync-template.sh  # 同步 core 更新（G4）
 │   ├── docs/
 │   │   ├── conventions.md         # 章节八段式、术语表、提交规范、数字规则
 │   │   ├── decisions.md           # 决策日志（决定/理由/猜错的代价）
 │   │   ├── definition-of-done.md  # 完成定义
 │   │   ├── architecture.md.tmpl   # 架构文档骨架
 │   │   └── retrospective.md.tmpl  # 复盘骨架（14 章框架）
-│   └── tests/
+│   └── tests/                     # 生成物自带的自测，正反例同一套断言
 │       ├── run-all.sh
-│       ├── lib/harness.sh         # stub 隔离 + 断言
+│       ├── lib/harness.sh         # new_tmpdir / assert_exit / assert_contains
 │       ├── test-privacy-gate.sh   # 门禁正反例
-│       └── test-docs-gate.sh      # 文档校验正反例
+│       ├── test-docs-gate.sh      # 文档校验正反例
+│       ├── test-prereqs.sh
+│       ├── test-boxes.sh
+│       └── test-gate.sh           # 分发 / all 失败即停 / CI 双份一致
 │
 ├── profiles/
-│   ├── minimal/                   # 形状：单机；工具只要 git + python3
-│   │   ├── course.yml
-│   │   ├── chapters/              # 章节大纲（只有标题，无正文）
-│   │   └── files/                 # 额外目录骨架
-│   └── multi-vm/                  # 形状：多台 VM + 配置管理（结构抽自第一课）
+│   └── minimal/                   # P0–P2 唯一实现的剖面（multi-vm 属 P3）
 │       ├── course.yml
-│       ├── stubs/{vagrant,ansible-playbook,kubectl}
-│       ├── chapters/
-│       └── files/{vagrant/,ansible/}
+│       ├── chapters/              # 3 章 + 00-README，只有标题与说明，无正文
+│       └── files/.gitkeep         # 预留额外目录骨架
 │
-└── tests/
-    ├── test-generate.sh           # 每个 profile 生成 → 门禁全绿 → 结构断言
-    ├── test-idempotent.sh         # 不覆盖非空目录
-    └── test-sync.sh               # 老版本 → 升级 → sync → 只动 core
+└── tests/                         # 模板仓库自测，不进生成物
+    ├── run-all.sh                 # 10 个 shell 自测 + 1 个单元测试，末尾 ALL PASS
+    ├── lib/harness.sh             # 薄壳共用
+    ├── test-{privacy-gate,docs-gate,prereqs,boxes,gate}.sh   # 转调 core/tests
+    ├── test-docs-seeds.sh         # 文档种子结构
+    ├── test-platform.sh           # PS 静态合规 + 换行 + Linux 检查
+    ├── test-generate.sh           # 生成 → 门禁全绿 → 结构与契约断言
+    ├── test-idempotent.sh         # 非空目录零写入（含 .git 与嵌套子目录）
+    ├── test-profile-purity.sh     # 剖面只有数据、目录名与 profile 字段一致
+    ├── unit/test_course_schema.py # course.yml 契约单元测试
+    └── (P4) test-sync.sh          # 老版本 → 升级 → sync → 只动 core
 ```
 
 ### 4.3 生成物结构
 
 ```
 <course-name>/
-├── AGENTS.md                      # 由 core/AGENTS.md.tmpl 渲染
-├── README.md
+├── AGENTS.md                      # 由 core/AGENTS.md.tmpl 渲染（TEMPLATE 区域为契约正文）
+├── README.md                      # 由 core/README.md.tmpl 渲染
+├── CHANGELOG.md                   # 由 core/CHANGELOG.md.tmpl 渲染（含未验证条目）
 ├── course.yml                     # 剖面 + 课程元数据合并结果（唯一配置源）
 ├── .course/
 │   ├── template-version           # 来源与版本（C10）
@@ -207,6 +222,7 @@ devops-self-study-base/
 ├── .github/workflows/gate.yml
 ├── .gitea/workflows/gate.yml
 ├── scripts/                       # 与 core 一致
+├── platform/                      # 与 core 一致（平台层，见 §15）
 ├── docs/
 │   ├── conventions.md
 │   ├── decisions.md
@@ -371,12 +387,17 @@ gate.sh all        # 全跑（CI 用）
 **反例夹具放哪**：不放仓库里。一个"故意含私钥和假内网 IP 的测试文件"如果被 git 跟踪，
 生成物第一次跑隐私门禁就会红（A2 失效），模板仓库自己推送也会红。
 
-做法：`tests/lib/harness.sh` 提供 `make_fixture_dir`，在**临时目录**里生成违规样本，
+做法：`core/tests/lib/harness.sh` 提供 `new_tmpdir`，在**临时目录**里生成违规样本，
 用 `privacy-check.sh --root "$tmp"` 检查，结束后删除。
-仓库里只有**生成夹具的代码**，没有违规内容。
+仓库里只有**生成夹具的代码**，没有违规内容；触发串用相邻单引号拼接（`'/da''ta/'`），
+让测试源码自身不被门禁判红。
 
 > 这条是对第一课的修正：第一课的做法是"把刻意构造的非法 IP 加进白名单"，
 > 等于用**削弱规则**来测试规则。临时目录方案不需要任何豁免。
+
+**模板仓库自身的白名单**：根目录 `.privacy-allow.yml` 只放拓扑演示地址
+（`192.168.56.10`、`192.168.56.11`），每条带 `reason`；扫描器跳过白名单文件自身。
+生成物里同名文件结构相同，课程侧也可以用 `course.yml` 的 `privacy.allow`，两者取并集。
 
 ### 5.3 文档校验
 
@@ -434,12 +455,15 @@ gate.sh all        # 全跑（CI 用）
 
 ### 5.5 门禁自测
 
-`tests/test-privacy-gate.sh` 与 `tests/test-docs-gate.sh` 必须**双向**断言：
+`core/tests/test-privacy-gate.sh` 与 `core/tests/test-docs-gate.sh` 必须**双向**断言：
 
 - 干净输入 → 退出码 0；
 - 构造违规输入 → 退出码 1，且**报出的位置正确**。
 
 只测"通过"的门禁等于没测。
+
+自测只有一份实现，放在 `core/tests/`：生成物直接带走，模板仓库根 `tests/` 的同类脚本是
+薄壳转调，避免两套断言漂移。模板仓库独有的测试（生成器、剖面纯净性）留在根 `tests/`。
 
 ---
 
@@ -474,10 +498,12 @@ gate.sh all        # 全跑（CI 用）
 ```yaml
 template: devops-self-study-base
 version: 0.1.0
-profile: multi-vm
-sha: <生成时模板仓库的短哈希>
-generated_at: 2026-11-02
+profile: minimal
+sha: <生成时模板仓库 HEAD 的完整哈希>
+generated_at: 2026-11-04T02:58:23Z
 ```
+
+`generated_at` 用 UTC 的 RFC3339；`sha` 取模板仓库 HEAD，工作区有未提交改动时它不代表实际内容。
 
 `.course/core-manifest.txt`：`core/` 下每个文件的 `sha256` 一行。
 
@@ -607,17 +633,21 @@ generated_at: 2026-11-02
 
 | 测试 | 覆盖 | 断言要点 |
 |---|---|---|
-| `test-generate.sh` | 每个 profile × 每个 `windows.mode` | 目录存在、无 `{{` 残留、四道门禁全绿、`git ls-files` 含 `tests/`；`ssh-only` 下**不存在** `provision-control.sh` 与 shim |
-| `test-idempotent.sh` | 生成器 | 非空目标目录 → 拒绝且**不写入任何文件** |
-| `test-sync.sh` | 同步 | 老版本生成 → 模板升 MINOR → sync → `managed` 更新、`seed-only` 不变、`managed-region` 只换区域；本地改过 `managed` 则退出码 2 |
+| `test-generate.sh` | 每个 profile × 每个 `windows.mode` | 目录存在、无 `{{` 残留、门禁全绿、`git ls-files` 含 `tests/`、生成物自测能跑；`ssh-only` 下**不存在** `provision-control.sh` 与 shim |
+| `test-idempotent.sh` | 生成器 | 非空目标（含 `.git`、隐藏目录、嵌套子目录）→ 退出码 1 且**不写入任何文件**；目标是文件同样拒绝；`--dry-run` 对已有目录只打印清单 |
+| `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh` / `*.py`**、不允许出现 `{{` 占位符；目录名必须在白名单内（`minimal` / `multi-vm`）；`profile` 字段与目录名一致 |
 | `test-privacy-gate.sh` | 隐私门禁 | 正例 0 / 反例 1 + 位置正确；**反例夹具建在临时目录**，且断言仓库内无违规文件 |
-| `test-docs-gate.sh` | 文档门禁 | 围栏奇数、表格错列、锚点失效各一个反例；`--sections` 不误伤 README |
-| `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错 |
-| `test-profile-purity.sh` | 剖面 | `profiles/**` 下**不允许出现 `*.sh`**；目录名必须在白名单内（`minimal` / `multi-vm`），新增剖面要走设计决策，不能顺手按主题加 |
-| `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；全仓库无 BOM；`git ls-files --eol` 索引换行正确；`nodes.windows.yml` 重新生成后 diff 为空；PS 静态合规（无 `??`/`?.`/`-Parallel`/`Set-Content`）；Linux 侧 check 脚本可在 CI 跑 |
-| `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；夹具声明 `assert_absent: [nginx]` 且命中已装命令 → 退出码 1（用临时目录里的假可执行文件构造，不建 VM）；`assert_absent` 为空时不做缺席断言 |
+| `test-docs-gate.sh` | 文档门禁 | 围栏奇数、表格错列、锚点失效、行尾空格各一个反例；`--sections` 不误伤 README；BOM 与 CRLF 各一个反例 |
+| `test-prereqs.sh` | 前置条件 | 伪造一个缺失工具 → 退出码 1 且输出含安装命令；`where: control` 的项在宿主上**不**报错；`verify.infra` 为空时警告但不改退出码 |
+| `test-platform.sh` | 跨平台（§15.14） | `.gitattributes` 覆盖所有扩展名；`.ps1` 无 BOM、无 PS7 语法、无默认编码写文件；`test-gate.sh` 覆盖两份 workflow 的一致性；Linux 侧 check 脚本可在 CI 跑 |
+| `test-boxes.sh` | 镜像与干净起点（§16） | 未知 box 名 → 退出码 1 且给最近候选；省略节点 `box` 时继承 `default_box`；两台不同家族 → 输出跨系提示但不改退出码；`assert_absent` 命中假可执行文件 → 退出码 1 |
+| `test-gate.sh` | 门禁入口与 CI 骨架 | 未知子命令退出码 2；`all` 在第一个失败处停止且**不打印** `all OK`；Markdown 事实源不当 YAML 解析；两份 workflow YAML 合法且除首行注释外逐字一致 |
+| `test-docs-seeds.sh` | 文档种子 | `AGENTS.md.tmpl` 的 TEMPLATE 标记各一次、四条红线与流程分级关键词齐全；`definition-of-done.md` 有「完成定义」节 |
+| `unit/test_course_schema.py` | `course.yml` 契约 | 默认值补齐（`assert_absent`/`where`/`chapters.dir`）、未知键与缺 `install` 被拒、非法 `windows.mode` 被拒、`dump_course` 能安全引号 |
+| `test-sync.sh`（P4） | 同步 | 未实现：老版本生成 → 模板升 MINOR → sync → `managed` 更新、`seed-only` 不变、`managed-region` 只换区域；本地改过 `managed` 则退出码 2 |
 
-模板自己的 CI 跑这九个。**模板的测试挂了，说明下一门课会带着 bug 出生。**
+模板自己的 `tests/run-all.sh` 跑这十一项（`test-sync.sh` 属 P4，尚未实现），末尾打印 `ALL PASS`。
+**模板的测试挂了，说明下一门课会带着 bug 出生。**
 
 ---
 
@@ -630,7 +660,7 @@ generated_at: 2026-11-02
 | P2 | `minimal` profile + `platform/linux` + `platform/windows` 的 `ssh-only` 档 + 镜像清单与 `assert_absent` + 端到端生成 | `test-generate.sh minimal --mode ssh-only` 全绿；`test-boxes.sh` 全绿；Linux 桌面手工走一遍 |
 | P3 | `multi-vm` profile + `control-node` 档（`provision-control.sh`、shim、`gen-nodes.py`）+ 节点级 `box:` 覆盖 | `test-generate.sh multi-vm --mode control-node` 全绿；PS 静态合规；两家族并存的拓扑能过 `gate.sh boxes` |
 | P4 | `sync-template.sh` + 版本策略 | `test-sync.sh` 全绿 |
-| P5 | CI（Gitea + GitHub）+ 模板自测进 CI | workflow 文件存在、两处 `gate.sh all` 等价、本地静态校验通过；**不要求真跑过**（§14） |
+| P5 | CI（Gitea + GitHub）+ 模板自测进 CI | workflow 文件存在、两处 `gate.sh all` 等价、本地静态校验通过；**不要求真跑过**（§14）。P2 已交付文件级 workflow 骨架，P5 只剩真实 runner 与口径校准 |
 
 **P2 是第一个真正的里程碑**：从这一阶段起，"生成一个能跑门禁的项目"这件事才成立。
 
@@ -647,8 +677,8 @@ Windows 实机的四项验证（自提权、host-only 网卡、shim 的 TTY、�
 
 | 项 | 建议 | 理由 |
 |---|---|---|
-| 语言 | bash + Python 3 标准库 | 与第一课一致，零第三方依赖 |
-| 模板渲染 | `sed` / `awk` 变量替换 | 不为 3 个变量引入 jinja2 |
+| 语言 | bash 薄壳 + Python 主逻辑 | 与第一课一致，零第三方依赖；`core/scripts/*.py` 不 import `lib/`（生成物没有 `lib/`） |
+| 模板渲染 | `str.replace` 逐占位符替换，渲染后仍有 `{{` 直接报错 | 不为 6 个变量引入 jinja2；显式校验比 sed 安全 |
 | 文档语言 | 中文 | 与目标读者一致 |
 | 许可证 | MIT | 与第一课一致 |
 | 元数据目录 | `.course/` | 不与 `.git/` `.github/` 抢名字空间 |
