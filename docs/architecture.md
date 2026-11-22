@@ -37,7 +37,7 @@ k3s-ops 是一个面向 **k3s 全生命周期管理** 的运维项目，基于 *
 
 ### 2.1 整体架构图
 
-**Linux 路径（标准路径）：**
+**标准路径（Linux / macOS）：**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -65,6 +65,8 @@ k3s-ops 是一个面向 **k3s 全生命周期管理** 的运维项目，基于 *
 │  管理工具: Vagrant CLI │ Ansible │ k3s-ops.sh                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+> macOS 与 Linux 使用相同拓扑和命令流（Vagrant + Ansible 在宿主机执行，k3s 在 VM 内运行）。差异仅在宿主机架构/Provider 检测、k3s 二进制架构自适应、以及 arm64 镜像兼容性，详见 [11.2 macOS / Apple Silicon 兼容性（Scheme A）](#112-macos--apple-silicon-兼容性scheme-a)。
 
 **Windows 路径（学员路径，新增 ops 工作机）：**
 
@@ -103,6 +105,7 @@ k3s-ops 是一个面向 **k3s 全生命周期管理** 的运维项目，基于 *
 |------|----------|------|
 | **server** | k3s server, embedded etcd, kubelet, kube-proxy | 控制面节点，组成 HA etcd 集群 |
 | **agent** | k3s agent, kubelet, kube-proxy | 纯工作节点，不运行控制面组件 |
+| **ops**（仅 Windows 路径） | Ansible, kubectl, helm, k3s-ops.sh | 运维 bastion VM，不加入 k3s 集群；宿主机仅执行 Vagrant 生命周期命令 |
 
 - 首个 server 节点负责初始化集群并生成 join token
 - 后续 server 节点自动加入 embedded etcd 集群（HA）
@@ -598,19 +601,35 @@ VirtualBox 会把每个 VM 进程的 `*VBoxHeadless-*.log` 写进启动进程的
 |------|----------|------|
 | VirtualBox | >= 7.0（macOS Apple Silicon 建议 >= 7.1） | VM 运行环境 |
 | Vagrant | >= 2.4（建议） | VM 编排 |
-| Ansible | >= 2.15 | 配置管理 |
+| Ansible | >= 2.15 | 配置管理（Windows 路径在 ops VM 内执行） |
 | helm | >= 3.14 | 部署 addons |
 | kubectl | 匹配 k3s 版本 | 集群管理 |
 
-宿主机内存建议 >= 16GB（3 节点集群约需 8-12GB）。
+宿主机内存建议 >= 16GB（3 节点集群约需 8-12GB；Windows ops VM 路径另加 ops 1c/1GB）。
 
-### 11.1 macOS / Apple Silicon 兼容性（Scheme A）
+### 11.1 平台支持矩阵
+
+| 平台 | 支持级别 | 宿主机执行 | VM 内执行 | 入口 | 关键限制 / 注意 | 详情 |
+|---|---|---|---|---|---|---|
+| Linux x86_64 | 完整支持 | Vagrant、Ansible、kubectl、helm、`k3s-ops.sh` | k3s server/agent | `./k3s-ops.sh` | 无 | 本文档 |
+| macOS Intel | 可用 | Vagrant、Ansible、kubectl、helm、`k3s-ops.sh` | k3s server/agent | `./k3s-ops.sh` | 需安装 VirtualBox/Vagrant/Ansible | [11.2](#112-macos--apple-silicon-兼容性scheme-a) |
+| macOS Apple Silicon | best-effort | Vagrant、Ansible、kubectl、helm、`k3s-ops.sh` | k3s server/agent（arm64） | `./k3s-ops.sh` | VirtualBox ARM 稳定性；容器镜像需 `linux/arm64`/multi-arch | [11.2](#112-macos--apple-silicon-兼容性scheme-a) |
+| Windows | 支持（ops VM 路径） | Vagrant、`win/up.ps1`、`win/down.ps1`、`win/destroy.ps1` | k3s server/agent + `k3s-demo-ops`（Ansible/kubectl/helm/`k3s-ops.sh`） | `win/up.ps1` | Ansible 不在宿主机运行；拓扑使用 `win/nodes.windows.yml` | [2.1](#21-整体架构图)、[11.3](#113-windows-ops-vm-路径约束) |
+
+### 11.2 macOS / Apple Silicon 兼容性（Scheme A）
 
 - **Box 架构**：`vagrant/Vagrantfile` 按 `vagrant/nodes.yml` 的 `network.box_architecture`（`auto|amd64|arm64`，默认 `auto`）选择 box 架构；`auto` 时基于宿主机 `RbConfig` 检测。非 amd64 需要支持 `config.vm.box_architecture` 的 Vagrant。
 - **k3s 二进制架构**：k3s 下载 URL 由 `ansible/group_vars/all.yml` 按 VM 的 `ansible_architecture` 生成（`x86_64/amd64 -> k3s`，`aarch64/arm64 -> k3s-arm64`）；`ansible/roles/k3s-common/tasks/assert-k3s-arch.yml` 在 install/add/upgrade 前断言支持的架构。
 - **Vagrant provisioner group_vars**：`ansible/playbooks/group_vars` 是指向 `../group_vars` 的 symlink，确保 Vagrant 自动生成 inventory 时也能加载 group_vars；Vagrantfile 不再传硬编码 `k3s_download_url`/`containerd_mirrors` extra_vars。
 - **下载源**：Vagrant provisioner 原先通过 extra_var 使用 GitHub releases；现统一使用 `ansible/group_vars/all.yml` 的 rancher-mirror 架构感知 URL（有意行为变化）。
 - **容器镜像**：k3s 二进制架构正确不代表容器镜像可用；Apple Silicon/arm64 VM 需要 `linux/arm64` 或 multi-arch 镜像。教学中显式下载 amd64 二进制或写死 amd64 架构的命令需按架构调整。
+
+### 11.3 Windows ops VM 路径约束
+
+- **拓扑差异**：Windows 路径在标准集群外增加 `k3s-demo-ops`（role: `ops`，1c/1GB），不加入 k3s 集群，只运行 Ansible/kubectl/helm/`k3s-ops.sh`。见 [2.1 整体架构图](#21-整体架构图)。
+- **职责分工**：Windows 宿主机执行 `up`/`down`/`destroy`（Vagrant 生命周期）；其余命令在 ops VM 内执行。Vagrant 宿主机 provisioner 在 Windows 路径跳过。
+- **配置文件**：Windows 路径使用 `win/nodes.windows.yml`；改动拓扑/端口/节点角色时，需同步检查 `vagrant/nodes.yml`、`win/nodes.windows.yml`、`win/up.ps1`、`win/README.md`。
+- **详细操作**：见 [`win/README.md`](../win/README.md) 与 [`docs/windows-ops-vm-design.md`](windows-ops-vm-design.md)。
 
 ---
 

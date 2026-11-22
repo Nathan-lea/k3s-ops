@@ -50,11 +50,12 @@ k3s-ops/
 - **升级策略**：逐节点替换二进制 + 重启 service（Ansible 方式）
 - **vagrant/nodes.yml** 是唯一需要手动编辑的配置文件
 
-## macOS / 架构兼容约定
+## 平台兼容约定
 
-- k3s 二进制下载 URL 由 `ansible/group_vars/all.yml` 按 VM `ansible_architecture` 生成（`amd64 -> k3s`，`arm64 -> k3s-arm64`）；Vagrantfile 不传硬编码 `k3s_download_url`/`containerd_mirrors` extra_vars。
-- `ansible/playbooks/group_vars` 是指向 `../group_vars` 的 symlink，保证 Vagrant provisioner 加载 group_vars；不要删除。
-- 主流程脚本避免 GNU-only `sed -i`、bash4 `mapfile`；macOS/Apple Silicon 仅 best-effort 支持，容器镜像需 `linux/arm64`/multi-arch。
+- **标准路径（Linux / macOS）**：Vagrant + Ansible 在宿主机执行，拓扑来自 `vagrant/nodes.yml`。k3s 二进制下载 URL 由 `ansible/group_vars/all.yml` 按 VM `ansible_architecture` 生成（`amd64 -> k3s`，`arm64 -> k3s-arm64`）；Vagrantfile 不传硬编码 `k3s_download_url`/`containerd_mirrors` extra_vars。
+- **macOS / Apple Silicon**：`box_architecture` 默认 `auto`；主流程脚本避免 GNU-only `sed -i`、bash4 `mapfile`；Apple Silicon 为 best-effort，容器镜像需 `linux/arm64`/multi-arch。细节见 `docs/macos-teaching-env-design-a.md`。
+- **Windows ops VM 路径**：宿主机只跑 Vagrant 生命周期（`win/up.ps1`/`down.ps1`/`destroy.ps1`），Ansible/kubectl/helm/`k3s-ops.sh` 在 `k3s-demo-ops` VM 内运行；拓扑来自 `win/nodes.windows.yml`。改拓扑/端口/角色/流程时，同步检查 `vagrant/nodes.yml`、`win/nodes.windows.yml`、`win/up.ps1`、`win/README.md`、`docs/architecture.md`。细节见 `win/README.md`。
+- **公共约定**：`ansible/playbooks/group_vars` 是指向 `../group_vars` 的 symlink，保证 Vagrant provisioner 加载 group_vars；不要删除。
 
 ## CLI 入口
 

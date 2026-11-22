@@ -26,11 +26,15 @@ export KUBECONFIG=./kubeconfig
 
 ---
 
-## Windows 学员：环境准备
+## 按宿主机平台准备环境
 
-上面的环境默认在 Linux 宿主机上使用。如果你只有一台 Windows 电脑、没有 Linux 环境，请走 **Windows 工作机路径**：Vagrant 仍装在 Windows 上管虚拟机，另起一台 `k3s-demo-ops`（1 核 / 1GB）专门跑 Ansible 与 kubectl，拓扑见 `docs/architecture.md` 的「Windows 路径」。
+| 平台 | 入口 | 说明 |
+|---|---|---|
+| Linux x86_64 | `./k3s-ops.sh init && ./k3s-ops.sh up && ./k3s-ops.sh install` | 标准路径，Vagrant + Ansible 在宿主机执行 |
+| macOS（Intel / Apple Silicon） | 同 Linux：`./k3s-ops.sh init/up/install` | 同拓扑；Apple Silicon 为 best-effort，需 VirtualBox >= 7.1 / Vagrant >= 2.4，容器镜像需 `linux/arm64`/multi-arch。详见 [`README.md`](../../README.md#环境要求) 与 [`docs/architecture.md`](../architecture.md#112-macos--apple-silicon-兼容性scheme-a) |
+| Windows | `powershell -ExecutionPolicy Bypass -File .\win\up.ps1 -Install` | ops VM 路径：宿主机只管 Vagrant 生命周期，Ansible/kubectl 在 `k3s-demo-ops` 内执行。详见 [`win/README.md`](../../win/README.md) |
 
-只要两条命令：
+### Windows 快速开始
 
 ```powershell
 # 1. 启动全部 VM + 引导工作机 + 安装集群 + 校正 kubeconfig（首次约 15-30 分钟）
@@ -48,7 +52,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 ```
 
 - 详细步骤、故障排查与常见失败模式见 **[`win/README.md`](../../win/README.md)**
-- 工作机与 Linux 宿主机的分工：`up` / `down` / `destroy` 在 Windows 上执行，其余命令（`install` / `add-node` / `remove-node` / `upgrade` / `backup` / `restore` / `deploy-*` / `status` / `ssh` / `kubeconfig`）都在工作机里执行
+- 分工：`up` / `down` / `destroy` 在 Windows 上执行，其余命令（`install` / `add-node` / `remove-node` / `upgrade` / `backup` / `restore` / `deploy-*` / `status` / `ssh` / `kubeconfig`）都在工作机里执行
 - 拓扑与内存：server-1 2c/4GB + agent-1 2c/2GB + ops 1c/1GB（8GB 内存机器可跑）
 
 > `add-node` 只用于**新起的空节点**：对已加入集群的节点重复执行会重启它的 k3s 服务，属预期行为。

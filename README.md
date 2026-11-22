@@ -4,6 +4,8 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 
 ## 快速开始
 
+### Linux / macOS
+
 ```bash
 # 1. 检查环境
 ./k3s-ops.sh init
@@ -23,6 +25,19 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 # 6. 获取 kubeconfig
 ./k3s-ops.sh kubeconfig
 ```
+
+### Windows（ops VM 路径）
+
+```powershell
+# 启动全部 VM + 引导工作机 + 安装集群（首次约 15-30 分钟）
+powershell -ExecutionPolicy Bypass -File .\win\up.ps1 -Install
+
+# 进入工作机验证/运维
+vagrant ssh k3s-demo-ops
+cd ~/k3s-ops && ./k3s-ops.sh status
+```
+
+> Windows 宿主机只执行 Vagrant 生命周期命令；`install/status/deploy-*` 等在 `k3s-demo-ops` 工作机内执行。详见 [`win/README.md`](win/README.md)。
 
 ## 集群拓扑
 
@@ -58,6 +73,7 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 | Linux x86_64 | VirtualBox >= 7.0, Vagrant >= 2.4（建议）, Ansible >= 2.15, Python3, 宿主机内存 >= 16GB | 主流程完整支持 |
 | macOS Intel | VirtualBox >= 7.0, Vagrant >= 2.4（建议）, Ansible >= 2.15, Python3 | 可用 Homebrew 安装：`brew install --cask virtualbox vagrant && brew install ansible` |
 | macOS Apple Silicon | VirtualBox >= 7.1, Vagrant >= 2.4, Ansible >= 2.15, Python3 | 需在“系统设置 > 隐私与安全性”中允许 Oracle 扩展；教学流程为 best-effort，受 VirtualBox ARM 上游稳定性影响 |
+| Windows（ops VM 路径） | Windows 宿主机安装 VirtualBox >= 7.0、Vagrant >= 2.4；Ansible/kubectl/helm 在 `k3s-demo-ops` VM 内运行 | 宿主机执行 `win/up.ps1` 等生命周期命令；详见 [`win/README.md`](win/README.md) |
 
 > `./k3s-ops.sh init` 会输出宿主机 OS/架构并给出 Apple Silicon 提示。
 
