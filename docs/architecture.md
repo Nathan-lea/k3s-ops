@@ -596,13 +596,21 @@ VirtualBox 会把每个 VM 进程的 `*VBoxHeadless-*.log` 写进启动进程的
 
 | 工具 | 版本要求 | 用途 |
 |------|----------|------|
-| VirtualBox | >= 7.0 | VM 运行环境 |
-| Vagrant | >= 2.3 | VM 编排 |
+| VirtualBox | >= 7.0（macOS Apple Silicon 建议 >= 7.1） | VM 运行环境 |
+| Vagrant | >= 2.4（建议） | VM 编排 |
 | Ansible | >= 2.15 | 配置管理 |
 | helm | >= 3.14 | 部署 addons |
 | kubectl | 匹配 k3s 版本 | 集群管理 |
 
 宿主机内存建议 >= 16GB（3 节点集群约需 8-12GB）。
+
+### 11.1 macOS / Apple Silicon 兼容性（Scheme A）
+
+- **Box 架构**：`vagrant/Vagrantfile` 按 `vagrant/nodes.yml` 的 `network.box_architecture`（`auto|amd64|arm64`，默认 `auto`）选择 box 架构；`auto` 时基于宿主机 `RbConfig` 检测。非 amd64 需要支持 `config.vm.box_architecture` 的 Vagrant。
+- **k3s 二进制架构**：k3s 下载 URL 由 `ansible/group_vars/all.yml` 按 VM 的 `ansible_architecture` 生成（`x86_64/amd64 -> k3s`，`aarch64/arm64 -> k3s-arm64`）；`ansible/roles/k3s-common/tasks/assert-k3s-arch.yml` 在 install/add/upgrade 前断言支持的架构。
+- **Vagrant provisioner group_vars**：`ansible/playbooks/group_vars` 是指向 `../group_vars` 的 symlink，确保 Vagrant 自动生成 inventory 时也能加载 group_vars；Vagrantfile 不再传硬编码 `k3s_download_url`/`containerd_mirrors` extra_vars。
+- **下载源**：Vagrant provisioner 原先通过 extra_var 使用 GitHub releases；现统一使用 `ansible/group_vars/all.yml` 的 rancher-mirror 架构感知 URL（有意行为变化）。
+- **容器镜像**：k3s 二进制架构正确不代表容器镜像可用；Apple Silicon/arm64 VM 需要 `linux/arm64` 或 multi-arch 镜像。教学中显式下载 amd64 二进制或写死 amd64 架构的命令需按架构调整。
 
 ---
 

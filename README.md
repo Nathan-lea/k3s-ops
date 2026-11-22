@@ -53,10 +53,31 @@ k3s 全生命周期管理工具，基于 **Vagrant + Ansible + VirtualBox** 实�
 
 ## 环境要求
 
-- VirtualBox >= 7.0
-- Vagrant >= 2.3
-- Ansible >= 2.15
-- 宿主机内存 >= 16GB
+| 平台 | 要求 | 说明 |
+|------|------|------|
+| Linux x86_64 | VirtualBox >= 7.0, Vagrant >= 2.4（建议）, Ansible >= 2.15, Python3, 宿主机内存 >= 16GB | 主流程完整支持 |
+| macOS Intel | VirtualBox >= 7.0, Vagrant >= 2.4（建议）, Ansible >= 2.15, Python3 | 可用 Homebrew 安装：`brew install --cask virtualbox vagrant && brew install ansible` |
+| macOS Apple Silicon | VirtualBox >= 7.1, Vagrant >= 2.4, Ansible >= 2.15, Python3 | 需在“系统设置 > 隐私与安全性”中允许 Oracle 扩展；教学流程为 best-effort，受 VirtualBox ARM 上游稳定性影响 |
+
+> `./k3s-ops.sh init` 会输出宿主机 OS/架构并给出 Apple Silicon 提示。
+
+### macOS / Apple Silicon 注意事项
+
+- Vagrantfile 会按 `vagrant/nodes.yml` 的 `network.box_architecture`（默认 `auto`）选择 box 架构；Apple Silicon 宿主机会自动选择 `arm64`。
+- k3s 二进制下载 URL 由 Ansible 根据 VM 的 `ansible_architecture` 自动生成（`amd64 -> k3s`，`arm64 -> k3s-arm64`），不是按宿主机架构猜。
+- 若 VirtualBox ARM 遇到稳定性问题，可在 `vagrant/nodes.yml` 设置 `network.provider` 为 `vmware_desktop` 或 `parallels`（逃生口，教学主流程官方支持 virtualbox）。
+
+### arm64 影响范围（教学章节注意事项）
+
+| 类别 | 影响 | 说明 |
+|---|---|---|
+| k3s/kubectl/crictl/ctr | 自动适配 | 随 `k3s-arm64` 安装，架构匹配，无需改教学命令 |
+| Helm 安装 | 基本自动适配 | Helm 安装脚本会自动检测架构 |
+| 容器镜像 | **需要 multi-arch** | k3s 系统镜像、nginx-ingress、cert-manager、Rancher 等官方镜像一般支持 `linux/arm64`；需实测验证。学员自定义镜像若只构建了 amd64，在 arm64 VM 上会 `ImagePullBackOff`/`exec format error` |
+| 教程里的 kubectl/YAML 操作 | 基本不受影响 | Deployment/Service/Ingress/ConfigMap 等 API 操作与架构无关 |
+| 教程里的示例输出 | **会不同** | 节点标签会显示 `kubernetes.io/arch=arm64`（而不是 amd64）；命令流程不变，但输出不同 |
+| 教程里显式下载 amd64 二进制的命令 | **需要改** | 如 `cilium-linux-amd64.tar.gz`、`GOARCH=amd64` 等，需要按架构换成 `arm64/aarch64` |
+| 性能/资源表现 | 可能略有不同 | Apple Silicon + VirtualBox ARM 的 VM 性能、网络行为与 x86_64 VirtualBox 不完全一样，但不影响 K8s 教学概念和命令 |
 
 ## 隐私检查钩子
 
