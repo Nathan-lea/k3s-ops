@@ -1,4 +1,7 @@
 ---
+- name: Assert k3s architecture is supported
+  include_tasks: assert-k3s-arch.yml
+
 - name: Set hostname
   hostname:
     name: "{{ inventory_hostname }}"
