@@ -17,29 +17,25 @@ k3s 全生命周期管理项目，基于 Vagrant + Ansible + VirtualBox 实现�
 
 ## 项目结构
 
-```
+```text
 k3s-ops/
-├── vagrant/
-│   ├── Vagrantfile          # 读取 nodes.yml 动态创建 VM
-│   └── nodes.yml            # 集群拓扑配置（核心）
-├── ansible/
-│   ├── playbooks/           # 11 个 playbook
-│   ├── roles/
-│   │   ├── k3s-common/      # OS 基础配置（swap/sysctl/firewall/containerd）
-│   │   ├── k3s-server/      # server 安装（init/join）
-│   │   ├── k3s-agent/       # agent 安装
-│   │   └── k3s-manage/      # remove/upgrade 操作
-│   └── group_vars/          # all.yml / server.yml / agent.yml
-├── addons/                  # Helm values
-├── scripts/                 # 辅助脚本
-├── lib/
-│   ├── logging.sh             # 共享日志库（所有脚本通过 source 引入）
-│   └── nodes.sh               # 节点名解析库（短名 ↔ 完整主机名，唯一规则来源）
-├── logs/                    # 操作日志（自动生成，超 10MB 归档）
-│   └── vbox/                # VirtualBox VM 日志（由 up/down/destroy 自动归档，保留最近 20 个）
+├── vagrant/                 # VM 编排（Vagrantfile, nodes.yml）
+├── ansible/                 # 配置管理（ansible.cfg, playbooks/, roles/, group_vars/, files/）
+├── addons/                  # Helm values（rancher/, nginx-ingress/, monitoring/）
+├── scripts/                 # 辅助脚本（bootstrap, get-kubeconfig, privacy-check, gen-inventory 等）
+├── lib/                     # 共享 shell 库（logging.sh, nodes.sh）
+├── win/                     # Windows ops VM 路径（up/down/destroy.ps1, nodes.windows.yml, provision-ops.sh）
+├── docs/                    # 架构/设计/教程/运维文档（architecture.md, k8s-tutorial/, macos/windows 设计等）
+├── tests/                   # 测试脚本（run-all.sh, test-*.sh, stubs/）
+├── examples/                # 示例（如 webapp-operator）
+├── production/              # 独立生产环境目录（物理隔离，不受主流程改动影响）
+├── .githooks/               # Git hooks（pre-commit, pre-push）
 ├── k3s-ops.sh               # 统一 CLI 入口
-└── docs/architecture.md     # 详细架构设计文档
+├── Vagrantfile              # 根 Vagrantfile（委派到 vagrant/）
+└── README.md
 ```
+
+> `logs/`、`kubeconfig`、`*.tgz`、`tmp/` 等为运行/本地产物，不作为稳定结构；新增/删除顶层目录或关键工作流目录时，同步更新本节与 `docs/architecture.md` 项目结构。
 
 ## 关键设计决策
 

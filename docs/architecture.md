@@ -191,105 +191,55 @@ VBoxManage modifyvm <vm> --natnet1 "192.168.99.0/24"
 
 ## 3. 项目结构
 
-```
+```text
 k3s-ops/
-│
-├── docs/                               # 文档
-│   └── architecture.md                 # 本架构文档
-│
-├── vagrant/                            # VM 生命周期管理
+├── vagrant/                            # VM 生命周期管理（标准路径）
 │   ├── Vagrantfile                     # 动态 Vagrantfile，读取 nodes.yml
 │   └── nodes.yml                       # 集群拓扑定义（核心配置文件）
 │
+├── win/                                # Windows ops VM 路径
+│   ├── up.ps1 / down.ps1 / destroy.ps1 # 宿主机生命周期入口
+│   ├── provision-ops.sh                # 引导 ops 工作机
+│   ├── kubeconfig.ps1                  # Windows 侧 kubeconfig 处理
+│   ├── nodes.windows.yml               # Windows 路径拓扑（含 ops 节点）
+│   └── README.md                       # Windows 路径操作说明
+│
 ├── ansible/                            # k3s 全生命周期管理
-│   ├── ansible.cfg                     # Ansible 配置
-│   ├── inventory.yml                   # 动态 Inventory（由 Vagrant 生成）
-│   │
-│   ├── playbooks/                      # 剧本
-│   │   ├── k3s-cluster.yml             # 入口：完整安装 k3s 集群
-│   │   ├── k3s-install.yml             # 安装/初始化 k3s
-│   │   ├── k3s-add-server.yml          # 添加 server 节点
-│   │   ├── k3s-add-agent.yml           # 添加 agent 节点
-│   │   ├── k3s-remove-node.yml         # 排空并移除节点
-│   │   ├── k3s-upgrade.yml             # 滚动升级 k3s 版本
-│   │   ├── k3s-backup.yml              # etcd 快照备份
-│   │   ├── k3s-restore.yml             # 从快照恢复集群
-│   │   ├── rancher-deploy.yml          # 部署 Rancher UI
-│   │   ├── rancher-reset-admin.yml     # 重置 Rancher admin 密码
-│   │   └── nginx-ingress-deploy.yml    # 部署 nginx-ingress
-│   │
-│   ├── roles/                          # 角色
-│   │   ├── k3s-common/                 # 基础 OS 配置
-│   │   │   ├── tasks/
-│   │   │   │   ├── main.yml            # swap, sysctl, hostname
-│   │   │   │   ├── containerd.yml      # containerd 镜像加速
-│   │   │   │   └── firewall.yml        # 开放端口
-│   │   │   └── vars/
-│   │   │       └── main.yml
-│   │   │
-│   │   ├── k3s-server/                 # Server 节点
-│   │   │   ├── tasks/
-│   │   │   │   ├── main.yml
-│   │   │   │   ├── install.yml         # 下载安装 k3s
-│   │   │   │   ├── config.yml          # 生成 config.yaml
-│   │   │   │   ├── init.yml            # 初始化第一个 server
-│   │   │   │   └── join.yml            # 加入已有 etcd 集群
-│   │   │   ├── templates/
-│   │   │   │   └── config.yaml.j2      # k3s server 配置模板
-│   │   │   └── vars/
-│   │   │       └── main.yml
-│   │   │
-│   │   ├── k3s-agent/                  # Agent 节点
-│   │   │   ├── tasks/
-│   │   │   │   ├── main.yml
-│   │   │   │   ├── install.yml         # 下载安装 k3s
-│   │   │   │   └── config.yml          # 配置 agent
-│   │   │   ├── templates/
-│   │   │   │   └── config.yaml.j2
-│   │   │   └── vars/
-│   │   │       └── main.yml
-│   │   │
-│   │   └── k3s-manage/                 # 集群管理操作
-│   │       ├── tasks/
-│   │       │   ├── main.yml
-│   │       │   ├── remove-node.yml     # cordon + drain + delete
-│   │       │   └── upgrade.yml         # 升级逻辑
-│   │       └── templates/
-│   │           └── upgrade-plan.yml.j2
-│   │
-│   ├── group_vars/                     # 分组变量
-│   │   ├── all.yml
-│   │   ├── server.yml
-│   │   └── agent.yml
-│   │
-│   └── files/                          # 静态文件
-│       ├── etcd-snapshot-cron.sh
-│       └── health-check.sh
+│   ├── ansible.cfg
+│   ├── inventory.yml                   # 动态 Inventory（由 Vagrant/脚本生成）
+│   ├── playbooks/                      # 剧本（k3s-cluster/install/add/remove/upgrade/backup/restore/deploy-*）
+│   ├── roles/
+│   │   ├── k3s-common/                 # OS 基础配置（sysctl/firewall/containerd/arch assert）
+│   │   ├── k3s-server/                 # server 安装（init/join）
+│   │   ├── k3s-agent/                  # agent 安装
+│   │   └── k3s-manage/                 # remove/upgrade 操作
+│   ├── group_vars/                     # all.yml / server.yml / agent.yml
+│   └── files/                          # 静态文件（etcd-snapshot-cron.sh, health-check.sh）
 │
 ├── addons/                             # Helm values
 │   ├── rancher/
-│   │   └── values.yaml
 │   ├── nginx-ingress/
-│   │   └── values.yaml
 │   └── monitoring/
-│       └── values.yaml
 │
-├── scripts/                            # 辅助脚本
-│   ├── bootstrap.sh                    # 环境依赖检查/安装
-│   ├── get-kubeconfig.sh               # 获取 kubeconfig
-│   ├── update-nodes.sh                 # 更新拓扑后重新 provision
-│   └── cleanup.sh                      # 清理本地缓存
+├── scripts/                            # 辅助脚本（bootstrap, get-kubeconfig, privacy-check, gen-inventory, cleanup 等）
+├── lib/                                # 共享 shell 库（logging.sh, nodes.sh）
+├── tests/                              # 测试脚本与 stubs
+├── examples/                           # 示例（如 webapp-operator）
+├── docs/                               # 文档
+│   ├── architecture.md                 # 架构设计（本文件）
+│   ├── k8s-tutorial/                   # 教程
+│   ├── macos-teaching-env-*.md         # macOS 方案/设计/计划
+│   ├── windows-ops-vm-design.md        # Windows ops VM 设计
+│   └── *.md                            # 运维/复盘/专题文档
 │
-├── lib/                                # 共享库
-│   └── logging.sh                      # 日志库（所有脚本共用）
-│
-├── logs/                               # 操作日志（自动生成）
-│   └── k3s-ops.log                     # 日志文件，超 10MB 自动轮转
-│
+├── production/                         # 独立生产环境目录（物理隔离，主流程改动不影响）
+├── .githooks/                          # Git hooks（pre-commit, pre-push）
 ├── k3s-ops.sh                          # 统一 CLI 入口
-├── Vagrantfile                         # 项目根 Vagrantfile（委派到 vagrant/）
+├── Vagrantfile                         # 根 Vagrantfile（委派到 vagrant/）
 └── README.md
 ```
+
+> `logs/`、`kubeconfig`、`*.tgz`、`tmp/` 等为运行/本地产物，不作为稳定结构。新增/删除顶层目录或关键工作流目录时，同步更新本节与 `AGENTS.md` 的项目结构。
 
 ---
 
