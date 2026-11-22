@@ -4,6 +4,10 @@ k3s_version: v1.30.2+k3s2
 network:
   subnet: 192.168.56.0/24
   box: bento/ubuntu-22.04
+  # 可选：virtualbox（默认）| vmware_desktop | parallels
+  # provider: virtualbox
+  # 可选：auto（默认，按宿主机检测）| amd64 | arm64
+  # box_architecture: auto
 
 nodes:
   - name: server-1

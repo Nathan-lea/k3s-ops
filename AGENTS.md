@@ -50,6 +50,12 @@ k3s-ops/
 - **升级策略**：逐节点替换二进制 + 重启 service（Ansible 方式）
 - **vagrant/nodes.yml** 是唯一需要手动编辑的配置文件
 
+## macOS / 架构兼容约定
+
+- k3s 二进制下载 URL 由 `ansible/group_vars/all.yml` 按 VM `ansible_architecture` 生成（`amd64 -> k3s`，`arm64 -> k3s-arm64`）；Vagrantfile 不传硬编码 `k3s_download_url`/`containerd_mirrors` extra_vars。
+- `ansible/playbooks/group_vars` 是指向 `../group_vars` 的 symlink，保证 Vagrant provisioner 加载 group_vars；不要删除。
+- 主流程脚本避免 GNU-only `sed -i`、bash4 `mapfile`；macOS/Apple Silicon 仅 best-effort 支持，容器镜像需 `linux/arm64`/multi-arch。
+
 ## CLI 入口
 
 ```bash

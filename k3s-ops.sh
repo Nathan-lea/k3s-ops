@@ -96,11 +96,14 @@ _archive_vbox_logs() {
   log_debug "Archived ${#files[@]} VirtualBox log(s) to logs/vbox/"
 
   # 按修改时间保留最新 keep 个
-  local -a stale=()
-  mapfile -t stale < <(ls -1t "${dest}"/*VBoxHeadless-*.log 2>/dev/null | tail -n "+$((keep + 1))")
-  if [ "${#stale[@]}" -gt 0 ]; then
-    rm -f "${stale[@]}"
-    log_debug "Pruned ${#stale[@]} old VirtualBox log(s) (keep latest ${keep})"
+  local stale_count=0
+  while IFS= read -r stale_file; do
+    [ -n "$stale_file" ] || continue
+    rm -f "$stale_file"
+    stale_count=$((stale_count + 1))
+  done < <(ls -1t "${dest}"/*VBoxHeadless-*.log 2>/dev/null | tail -n "+$((keep + 1))")
+  if [ "$stale_count" -gt 0 ]; then
+    log_debug "Pruned ${stale_count} old VirtualBox log(s) (keep latest ${keep})"
   fi
 }
 

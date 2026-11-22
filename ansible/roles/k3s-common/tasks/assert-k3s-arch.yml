@@ -1,0 +1,11 @@
+---
+- name: Assert supported architecture for k3s binary
+  assert:
+    that:
+      - ansible_architecture in ['x86_64', 'amd64', 'aarch64', 'arm64']
+      - k3s_arch_suffix is defined
+      - k3s_arch_suffix != '__unsupported__'
+    fail_msg: >-
+      Unsupported ansible_architecture={{ ansible_architecture | default('undefined') }}.
+      Supported: x86_64/amd64 (k3s), aarch64/arm64 (k3s-arm64).
+      Override k3s_download_url for install/add, or k3s_upgrade_download_url for upgrade.

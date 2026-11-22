@@ -1,9 +1,20 @@
 ---
+- name: Assert k3s architecture is supported
+  include_role:
+    name: k3s-common
+    tasks_from: assert-k3s-arch
+
+- name: Set k3s upgrade download URL
+  set_fact:
+    k3s_upgrade_download_url: >-
+      {{ k3s_upgrade_download_url | default('https://rancher-mirror.rancher.cn/k3s/' ~ (k3s_upgrade_version | replace('+', '-')) ~ '/k3s' ~ k3s_arch_suffix) }}
+
 - name: Download new k3s binary
   get_url:
-    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_upgrade_version }}/k3s"
+    url: "{{ k3s_upgrade_download_url }}"
     dest: "{{ k3s_server_bin }}"
     mode: '0755'
+    force: yes
     timeout: 120
 
 - name: Restart k3s service

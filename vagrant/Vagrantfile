@@ -1,4 +1,5 @@
 require 'yaml'
+require 'rbconfig'
 
 # 集群拓扑文件：默认 vagrant/nodes.yml（Linux 路径）。
 # Windows 路径由 win/up.ps1 注入 K3S_OPS_NODES_FILE 指向 win/nodes.windows.yml，
@@ -10,6 +11,33 @@ nodes_config = YAML.load_file(nodes_file)
 cluster_name = nodes_config['cluster_name']
 network_cfg  = nodes_config['network']
 nodes        = nodes_config['nodes']
+
+provider_name = network_cfg.fetch('provider', 'virtualbox').to_s
+box_arch_cfg  = network_cfg.fetch('box_architecture', 'auto').to_s.downcase
+
+unless %w[virtualbox vmware_desktop parallels].include?(provider_name)
+  abort "Unsupported network.provider: #{provider_name}. Use virtualbox|vmware_desktop|parallels."
+end
+if provider_name != 'virtualbox'
+  warn "[k3s-ops] network.provider=#{provider_name} is an escape hatch; teaching flow is officially supported on virtualbox."
+end
+
+def detect_host_arch
+  arch = RbConfig::CONFIG['host_cpu'].to_s.downcase
+  case arch
+  when 'arm64', 'aarch64' then 'arm64'
+  when 'x86_64', 'amd64' then 'amd64'
+  else 'amd64'
+  end
+end
+
+resolved_box_arch = case box_arch_cfg
+when 'auto' then detect_host_arch
+when 'amd64', 'x86_64' then 'amd64'
+when 'arm64', 'aarch64' then 'arm64'
+else
+  abort "Unsupported box_architecture: #{box_arch_cfg}. Use auto|amd64|arm64."
+end
 
 # Windows 路径（清单含 ops 节点）由工作机执行 Ansible，宿主机上没有 ansible-playbook。
 # 此时跳过 ansible provisioner；Linux 路径保持原行为（缺 ansible 仍然报错，不静默跳过）。
@@ -30,6 +58,12 @@ ENV['ANSIBLE_ROLES_PATH'] = File.join(__dir__, '..', 'ansible', 'roles')
 Vagrant.configure('2') do |config|
   config.vm.box = network_cfg['box']
   config.vm.box_check_update = false
+
+  if config.vm.respond_to?(:box_architecture=)
+    config.vm.box_architecture = resolved_box_arch
+  elsif resolved_box_arch != 'amd64'
+    abort "Vagrant >= 2.4 is required for box_architecture=#{resolved_box_arch}. Please upgrade Vagrant."
+  end
 
   config.vm.provider 'virtualbox' do |vb|
     vb.gui = false
@@ -85,16 +119,6 @@ Vagrant.configure('2') do |config|
             k3s_token_dir:        '/var/lib/rancher/k3s/server',
             k3s_token_file:       '/var/lib/rancher/k3s/server/node-token',
             k3s_etcd_snapshot_dir: '/var/lib/rancher/k3s/server/db/snapshots',
-            k3s_download_url:     "https://github.com/k3s-io/k3s/releases/download/#{nodes_config['k3s_version']}/k3s",
-            containerd_mirrors: {
-              'docker.io' => [
-                'https://docker.1panel.live',
-                'https://docker-0.unsee.tech',
-              ],
-              'quay.io' => [
-                'https://quay.mirrors.ustc.edu.cn',
-              ],
-            },
           }
           ansible.host_vars = k8s_nodes.each_with_object({}) do |n, h|
             host = "#{cluster_name}-#{n['name']}"
