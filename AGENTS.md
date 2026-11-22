@@ -99,10 +99,10 @@ k3s-ops.sh init|up|down|install|add-node|remove-node|upgrade|backup|restore|depl
 
 项目在同步到 GitHub 等远程仓库前，**必须通过本地隐私检查**，防止 `kubeconfig`、私钥、绝对路径等敏感信息泄漏。
 
-- **钩子入口**: `.githooks/pre-push`，检查逻辑在 `scripts/privacy-check.sh`
+- **钩子入口**: `.githooks/pre-commit`（提交前）和 `.githooks/pre-push`（推送前），检查逻辑在 `scripts/privacy-check.sh`
 - **启用方式**: `git config core.hooksPath .githooks`（需在仓库内执行一次，`core.hooksPath` 为本地配置，不入库）
-- **触发时机**: 每次 `git push` 前自动运行；发现隐私风险（绝对路径/私钥/密钥/token/明文密码/白名单外私有 IP 等）即阻止推送
-- **手动运行**: `bash scripts/privacy-check.sh`
+- **触发时机**: `git commit` 前扫描当前跟踪文件；`git push` 前扫描当前跟踪文件 + 本次 push 范围的提交历史（防止“tip 干净、历史脏”）。发现隐私风险（绝对路径/私钥/密钥/token/明文密码/白名单外私有 IP 等）即阻止操作
+- **手动运行**: `bash scripts/privacy-check.sh`（当前文件）；`printf '<local> <local_sha> <remote> <remote_sha>\n' | bash scripts/privacy-check.sh --push-range`（历史范围）
 - **维护**: 项目设计内的值（如拓扑 IP、演示用 `admin` 密码）已加入 `ALLOW_*` 白名单，新增用例时同步维护该脚本
 
 ## 部署记录

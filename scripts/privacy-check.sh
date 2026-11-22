@@ -5,6 +5,12 @@
 # 退出码: 0 = 无风险（通过）; 1 = 发现风险
 set -u
 
+MODE="worktree"
+if [ "${1:-}" = "--push-range" ]; then
+  MODE="push-range"
+  shift
+fi
+
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "[privacy-check] 错误: 当前不在 git 仓库中"
   exit 2
@@ -15,7 +21,7 @@ cd "$(git rev-parse --show-toplevel)" || exit 2
 # 注意: core.quotepath=false 保证中文/特殊字符文件名以原始 UTF-8 输出,否则 ls-files
 # 会用引号+八进制转义(如 "docs/01-\346\226\207.md"),导致后续 [ -f ] 判断失效而漏检。
 mapfile -t FILES < <(git -c core.quotepath=false ls-files --cached --others --exclude-standard 2>/dev/null)
-if [ "${#FILES[@]}" -eq 0 ]; then
+if [ "$MODE" = "worktree" ] && [ "${#FILES[@]}" -eq 0 ]; then
   echo "[privacy-check] 没有可检查的文件"
   exit 0
 fi
@@ -71,6 +77,75 @@ declare -i FAIL=0
 
 add_issue() { ISSUES+=("  $1"); FAIL=1; }
 
+is_allowed_path_hit() {
+  local p="$1" a
+  for a in "${ALLOW_PATH_PATTERNS[@]}"; do
+    case "$p" in *"$a"*) return 0 ;; esac
+  done
+  return 1
+}
+
+scan_text_for_privacy() {
+  local label="$1" content="$2" f="$3"
+  local hits leak p
+  # 规则1: 本地绝对路径
+  hits=$(printf '%s\n' "$content" | grep -aoE "(/home/[a-zA-Z_][^\"']*|/Users/[^\"']*|/data/[a-zA-Z_][^\"']*|/mnt/[^\"']*|/root/[^\"']*|/rootfs/[^\"']*)" 2>/dev/null | sort -u || true)
+  if [ -n "$hits" ]; then
+    leak=""
+    while IFS= read -r p; do
+      [ -z "$p" ] && continue
+      is_allowed_path_hit "$p" || leak=1
+    done <<< "$hits"
+    [ -n "$leak" ] && add_issue "[绝对路径][$label] $f"
+  fi
+  # 规则2: 私钥
+  if printf '%s\n' "$content" | grep -aqE -e "-----BEGIN (RSA |EC |DSA |OPENSSH |)PRIVATE KEY-----" 2>/dev/null; then
+    add_issue "[私钥][$label] $f"
+  fi
+  # 规则3: kubeconfig 私钥数据
+  if printf '%s\n' "$content" | grep -aqE "(client-key-data|client-certificate-data|certificate-authority-data|client-key:|client-certificate:)" 2>/dev/null; then
+    add_issue "[kubeconfig私钥数据][$label] $f"
+  fi
+  # 规则4: API密钥
+  if printf '%s\n' "$content" | grep -aqE "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ghp_[0-9A-Za-z]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-[A-Za-z0-9_-]{20,})" 2>/dev/null; then
+    add_issue "[API密钥][$label] $f"
+  fi
+}
+
+scan_push_ranges() {
+  local line local_ref local_sha remote_ref remote_sha zero commit
+  local -a commits
+  zero="0000000000000000000000000000000000000000"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    read -r local_ref local_sha remote_ref remote_sha _ <<< "$line"
+    [ -n "${local_sha:-}" ] || continue
+    [ "$local_sha" = "$zero" ] && continue  # 删除分支
+    if [ "${remote_sha:-$zero}" = "$zero" ]; then
+      mapfile -t commits < <(git rev-list "$local_sha" --not --remotes 2>/dev/null || git rev-list "$local_sha" 2>/dev/null)
+    else
+      mapfile -t commits < <(git rev-list "$remote_sha..$local_sha" 2>/dev/null)
+    fi
+    for commit in "${commits[@]}"; do
+      [ -n "$commit" ] || continue
+      # 按文件拆分 diff，只检查新增行；跳过自检脚本
+      while IFS= read -r -d '' file_block; do
+        [ -n "$file_block" ] || continue
+        local f added
+        f=$(printf '%s\n' "$file_block" | sed -n 's/^+++ b\///p' | head -1)
+        [ -n "$f" ] || continue
+        is_self "$f" && continue
+        added=$(printf '%s\n' "$file_block" | grep '^+' | grep -v '^+++' || true)
+        [ -n "$added" ] || continue
+        scan_text_for_privacy "push-range ${commit:0:12}" "$added" "$f"
+      done < <(git show --unified=0 --no-color --diff-filter=ACMR --format= "$commit" 2>/dev/null | awk 'BEGIN{RS="diff --git "; ORS="\0"} NR>1{print $0}')
+    done
+  done
+}
+
+if [ "$MODE" = "push-range" ]; then
+  scan_push_ranges
+else
 # 对每个文件进行内容检查
 for f in "${FILES[@]}"; do
   [ -f "$f" ] || continue
@@ -153,6 +228,7 @@ for f in "${FILES[@]}"; do
       ;;
   esac
 done
+fi
 
 # ===== 输出 =====
 if [ "$FAIL" -eq 1 ]; then

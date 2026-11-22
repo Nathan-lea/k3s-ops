@@ -7,11 +7,26 @@ set -u
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 check_script="${ROOT}/scripts/privacy-check.sh"
 
+# 读取 stdin（git 传入: <local ref> <local sha> <remote ref> <remote sha>）
+PUSH_REFS=""
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  PUSH_REFS+="${line}"$'\n'
+done
+
 if [ -x "$check_script" ]; then
   if ! bash "$check_script"; then
     echo ""
     echo "❌ push 已阻止：存在隐私泄漏风险。请先处理上述问题。"
     exit 1
+  fi
+  # 扫描本次 push 范围内的提交历史，防止“tip 干净、历史脏”
+  if [ -n "$PUSH_REFS" ]; then
+    if ! printf '%s' "$PUSH_REFS" | bash "$check_script" --push-range; then
+      echo ""
+      echo "❌ push 已阻止：push 范围的提交历史中存在隐私泄漏风险。请先处理上述问题。"
+      exit 1
+    fi
   fi
 else
   echo "[pre-push] 警告: 未找到 ${check_script},跳过隐私检查"
