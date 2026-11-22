@@ -33,6 +33,8 @@ log_info "Kubeconfig saved to ${KUBECONFIG_DEST}"
 # Replace localhost with server IP
 SERVER_IP=$(vagrant ssh "${SERVER_HOST}" -- ip addr show eth1 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
 if [ -n "$SERVER_IP" ]; then
-  sed -i "s/127.0.0.1/${SERVER_IP}/g" "$KUBECONFIG_DEST"
+  tmp_kubeconfig="$(mktemp "${KUBECONFIG_DEST}.tmp.XXXXXX")"
+  sed "s/127.0.0.1/${SERVER_IP}/g" "$KUBECONFIG_DEST" > "$tmp_kubeconfig"
+  mv "$tmp_kubeconfig" "$KUBECONFIG_DEST"
   log_info "Server address updated to ${SERVER_IP}"
 fi
