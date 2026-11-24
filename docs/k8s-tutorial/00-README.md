@@ -78,7 +78,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
 | 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno | 建立访问控制与策略治理 |
-| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数 | 提升安装、备份、排障能力 |
+| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维、47 监控告警实战 | 提升安装、备份、排障、可观测能力 |
 
 ### 章节依赖关系
 
@@ -130,6 +130,8 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 43 Kyverno 策略引擎 | 24/35/39/42 | PSA 的边界与分层、Kyverno 架构（四控制器 + 20 CRD）、validate/mutate/generate 三类策略实测、PolicyReport 合规报告、Kyverno CLI 离线测试、failurePolicy 与逃生/卸载 |
 | 44 Service 暴露与 LoadBalancer | 04/21/37 | Service 三形态对比、k3s ServiceLB 机制与默认状态、开与不开实测对比、本环境/公司测试/生产选型、MetalLB 与 VIP、本环境开启与回滚步骤 |
 | 45 集群安装前服务器参数设置 | 00/10 | 硬性 vs 建议参数分组、swap/内核模块/sysctl/limits/NTP/防火墙端口逐项“四要素”（参数名·值·作用·设置位置）、k3s-common 角色对照、一键设置与体检脚本（幂等 / --check / 退出码巡检） |
+| 46 集群生命周期运维 | 00/03/08/10/12/38/45 | `k3s-ops.sh` 生命周期边界、add/remove/upgrade/backup/restore 流程、验收与回滚注意事项 |
+| 47 监控告警实战 | 08/10/34/36/46 | kube-prometheus-stack 部署思路、仓库 `addons/monitoring/values.yaml` 裁剪、Grafana/Prometheus/Alertmanager 实战与资源约束 |
 
 ---
 
@@ -202,3 +204,5 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [43 Kyverno 策略引擎](43-Kyverno策略引擎.md) | validate/mutate/generate 三类策略、Enforce 拦截与 Audit 报告、PolicyReport、Kyverno CLI 离线测试、PSA 分层、failurePolicy 逃生与卸载 |
 | [44 Service 暴露与 LoadBalancer](44-Service暴露与LoadBalancer.md) | 三种暴露方式、k3s ServiceLB 机制与开关、开与不开对比、本环境/公司测试/生产选型、MetalLB 与真 VIP、本环境开启与回滚 |
 | [45 集群安装前服务器参数设置](45-集群安装前服务器参数设置.md) | 装前 OS 参数（swap/内核模块/sysctl/limits/NTP/防火墙）、硬性 vs 建议、k3s-common 对照、一键设置与体检脚本 |
+| [46 集群生命周期运维](46-集群生命周期运维.md) | 扩容、缩容、升级、备份恢复；`k3s-ops.sh`/Vagrant/Ansible/kubectl 职责边界与验收 |
+| [47 监控告警实战](47-监控告警实战.md) | kube-prometheus-stack、Prometheus/Grafana/Alertmanager、基于 `addons/monitoring/values.yaml` 的实验裁剪与告警实战 |
