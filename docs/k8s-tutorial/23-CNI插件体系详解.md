@@ -1,5 +1,15 @@
 # 23 CNI 插件体系详解：flannel / Calico / Cilium 与集群网络底座
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 04/22 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **CNI 是什么**：一套"容器怎么获得网络"的标准化接口（规范 + 插件 + 配置）
@@ -347,3 +357,12 @@ Rancher UI 是"评估/切换 CNI"最直观的入口——但**只对 Rancher 自
 4. `<none>` 说明 **CNI 层没把网建起来**（IPAM 没给 IP）——不是数据面（Service 转发）问题。第一步：`kubectl describe pod <name>` 看 Events 里 CNI 报错（再配合节点 `journalctl -u k3s` 看 flannel 日志）。
 5. Pod CIDR 由各 CNI 自己声明并广播，选两套不同的默认网段（10.42 vs 10.244）会在节点/路由层面出现"两个子网互相不认识"：旧插件建的 Pod 路由与路由表继承冲突、kubelet 的 node annotation（`flannel.alpha.coreos.com/…` 或 controller 分配的 CIDR）残留旧值，导致新增 Pod 拿错网段/IP 冲突——换 CNI 要么沿用同一 CIDR，要么彻底清理（重建节点最干净）。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

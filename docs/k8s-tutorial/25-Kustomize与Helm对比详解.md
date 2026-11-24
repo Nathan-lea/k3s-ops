@@ -1,5 +1,15 @@
 # 25 Kustomize 与 Helm：同一份 YAML 的两种"变身术"
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/15/24 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **Kustomize 的核心思想**：无模板、不学新语法，纯 YAML 声明式**覆盖**（base + overlay）
@@ -551,3 +561,12 @@ kubectl delete ns demo-kustomize
 5. GitOps 工具负责"盯住 Git、拉取变更"；**Kustomize/Helm 是渲染器**，把声明渲染成最终清单后交给工具 apply。二者处在"渲染"环节，GitOps 是"驱动"环节。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

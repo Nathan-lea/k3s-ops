@@ -1,5 +1,15 @@
 # 34 资源治理、QoS 与 HPA 实战
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/06 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 Kubernetes 资源治理的核心：`requests`（请求）与 `limits`（限制）的区别及调度/驱逐逻辑
@@ -311,3 +321,12 @@ HPA 只有在指标可用（Metrics Server 正常运行）时才能计算扩缩�
 - HPA：`php-apache`（autoscaling/v2），`cpu: 0%/50%`，minReplicas 1，maxReplicas 3，REPLICAS 1
 
 > 演示结束后可按需清理：`kubectl --kubeconfig ./kubeconfig delete ns hpa-demo`
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

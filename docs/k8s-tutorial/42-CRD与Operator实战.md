@@ -1,5 +1,15 @@
 # 42 CRD 与 Operator 实战
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/15/31/39 |
+| 预计耗时 | 90-150 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **CRD（CustomResourceDefinition）** 解决了什么问题：内置资源不够用时，如何**给 API Server 注册一个新类型**
@@ -1580,4 +1590,13 @@ config/rbac/{serviceaccount,role,rolebinding}.yaml
 config/manager/deployment.yaml        # 控制器自身 Deployment
 config/samples/demo-webapp.yaml       # 演示 CR
 README.md                             # 复现步骤
+```
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
 ```

@@ -1,5 +1,15 @@
 # 39 Pod 安全与安全上下文
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/07/32/33 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解"容器不是沙箱"：为什么 `privileged`、`hostNetwork`、root 运行是高风险配置
@@ -500,3 +510,12 @@ kubectl --kubeconfig ./kubeconfig delete ns podsec-demo
 ```
 
 > ⚠️ `podsec-demo` 命名空间带着 `enforce=restricted` 标签，若你想继续在其中做实验，任何不满足 restricted 的 Pod 都会被拒——这是预期行为。
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

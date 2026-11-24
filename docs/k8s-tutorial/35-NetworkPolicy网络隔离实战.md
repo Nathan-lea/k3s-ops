@@ -1,5 +1,15 @@
 # 35 NetworkPolicy 网络隔离实战
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 04/07/32 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 NetworkPolicy 的作用：默认全通（Flannel 默认）到“最小权限”（Least Privilege）
@@ -366,3 +376,12 @@ spec:
 - 连通性实测：deny-all 后 `wget` 失败（exit 1）；双向放行后成功返回 httpd 页面
 
 > 演示结束后可按需清理：`kubectl --kubeconfig ./kubeconfig delete ns netpol-demo`
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

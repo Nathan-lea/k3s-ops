@@ -1,5 +1,15 @@
 # 44 Service 暴露与 LoadBalancer（k3s ServiceLB 详解）
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 04/21/37 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 中：启用/回滚 ServiceLB 会改变集群网络行为，按章内步骤操作 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 > 本章从"Service 到底怎么被集群外部访问"切入，重点讲清 **k3s 自带的 LoadBalancer 实现（ServiceLB）**：
 > 它是什么、做了什么、**开与不开有什么区别**，以及在本环境 / 公司级测试（KVM）/ 生产（混合云）里分别该怎么选。
 
@@ -437,3 +447,12 @@ playbook: playbooks/k3s-cluster.yml
     hosts (0):
 ```
 
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

@@ -1,5 +1,15 @@
 # 38 PodDisruptionBudget 与节点维护实战
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 06/10 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 中：`drain/cordon` 会影响调度与 Pod 驱逐，务必按流程操作 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解"自愿中断（voluntary）"与"非自愿中断（involuntary）"以及 PDB（PodDisruptionBudget）的定位
@@ -441,3 +451,12 @@ kubectl --kubeconfig ./kubeconfig delete ns pdb-demo
 ```
 
 > ⚠️ 本章 drain/cordon 均为**真实节点操作**，演练后务必执行 §5.5 的恢复步骤；若容器在维护场景（如验证升级）中使用，请先为关键应用补好 PDB 再 drain。
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

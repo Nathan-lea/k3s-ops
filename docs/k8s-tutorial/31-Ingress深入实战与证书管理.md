@@ -1,5 +1,15 @@
 # 31 Ingress 深入实战与证书管理
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 04/21 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 真正搞懂 Ingress 的请求路径：域名 → IngressController → Service → Pod，以及每一层各自"管什么"
@@ -522,3 +532,12 @@ $ curl -si -H 'Host: tls.lab.k3s.local' http://192.168.56.10:30080/
 7. 金丝雀动作清单：建金丝雀 Deployment + **专属** Service → 加带 `canary`/`canary-weight` 注解的 Ingress → 验证灰度比例 → 全量切换（主 Ingress 指向新版本）→ 删除金丝雀资源与注解。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

@@ -1,5 +1,15 @@
 # 27 GitOps 多服务与多环境：仓库该怎么组织
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 24/25/26 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 分清**两类仓库**：业务源码仓库 vs 部署配置仓库（GitOps 管的是后者）
@@ -469,3 +479,12 @@ kubectl get all -A -l app.kubernetes.io/part-of=shop
 6. 用 **Helm chart** 作为 base 打包单元（chart 自带模板，`helm template` 不依赖外部相对路径，天然满足 Fleet 的 path 自包含），overlay 只提供 values；或改用 `remote base`。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

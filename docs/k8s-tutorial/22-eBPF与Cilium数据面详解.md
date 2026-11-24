@@ -1,5 +1,15 @@
 # 22 eBPF 与 Cilium 数据面详解：下一代集群网络
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 11/21 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **eBPF 是什么**：内核里的"可编程沙箱"，为什么它能安全地改写网络行为
@@ -349,3 +359,12 @@ Rancher UI 对"数据面属于哪一代（iptables / ipvs / eBPF）"**没有可�
 4. iptables 版：Client → ClusterIP → KUBE-SVC（概率挑端点）→ KUBE-SEP（DNAT）→ Pod，回程 SNAT——中间多一跳 NAT；Cilium 版：connect(ClusterIP:80) 在 socket 层直接改写成 connect(PodIP:80)——没有 DNAT/SNAT 那一跳，路径最短。
 5. Cilium 基于 eBPF 的 socket/TC 钩子能"看懂"连接与流量内容（BPF Helper 支持按 HTTP 字段过滤），配合 Identity 机制把策略绑定到逻辑身份而非 IP；iptables 数据面只有包级字段（IP/端口/协议），"看到"不了 HTTP 层，自然写不了 HTTP 规则。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

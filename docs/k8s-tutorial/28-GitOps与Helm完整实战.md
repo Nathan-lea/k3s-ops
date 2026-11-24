@@ -1,5 +1,15 @@
 # 28 GitOps 使用 Helm Chart 完整实战
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 24/25/26/27 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 讲清 **Fleet 如何在 GitOps 流程里使用 Helm**：配置入口（`fleet.yaml` / options）、三种打包方式（chart / kustomize / 原始 YAML）
@@ -573,3 +583,12 @@ Fleet 还有独立的 `HelmOp` 资源，用于**只引用外部 chart、不在 G
 7. `valuesFrom.secretKeyRef` 从 Secret 取值注入 values，仓库里只留 Secret 引用、不留明文，密码不进 Git 也能生效。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

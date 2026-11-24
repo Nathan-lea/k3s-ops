@@ -1,5 +1,15 @@
 # 07 安全与 RBAC：谁有资格碰集群
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 02 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 K8s 安全四步：认证（你是谁）→ 授权（你能干啥）→ 准入（额外检查）
@@ -293,3 +303,12 @@ Rancher 的权限模型（全局角色/集群角色/项目角色）**映射到�
 4. 示例 `kubectl get rolebinding -A | grep -i admin` 或看 cattle-* 的绑定。
 5. 最小权限：default 通常权限未知/可能被集群策略放大；独立 SA + 专属 Role 可精确控制、可审计、可轮换，避免「一把钥匙开所有门」。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

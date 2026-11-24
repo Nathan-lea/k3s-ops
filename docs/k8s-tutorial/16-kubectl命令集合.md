@@ -1,5 +1,15 @@
 # 16 kubectl 命令集合：语法、选项、子命令全景详解
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 13/14/15 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 建立 kubectl 的**命令地图**：按"查询 / 操作 / 调试 / 发布 / 集群管理 / 配置"六大类记忆
@@ -740,3 +750,12 @@ Warning: version difference between client (1.37) and server (1.30) exceeds the 
 4. 事件链应包含：`ScaledUpReplicaSet`（新 RS 拉副本）→ `ScalingReplicaSet` → 旧 RS `SuccessfulDelete`/`Killing`→ 新 Pod `Started`——**这正是第 15 章"Deployment→RS→Pod 归属链"在事件层的可见证明**。
 5. `-o name` 输出 `pod/xxx` 前缀（脚本好用，可继续 `| xargs kubectl delete`）；`jsonpath` 纯名字无表头（机器用）；`custom-columns` 带表头表格（人读报表）。场景：循环脚本用 `-o name` 或 jsonpath，给人看用 custom-columns/wide。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

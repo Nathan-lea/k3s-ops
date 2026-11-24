@@ -1,5 +1,15 @@
 # 11 Service 与 iptables 深入：kube-proxy 的转发实现
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 04 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 kube-proxy 用 **iptables** 实现 Service 的核心机制（DNAT + 概率负载均衡）
@@ -371,3 +381,12 @@ iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式
 5. 每条规则若固定 20%，前 5 条各自命中 20%，但**第 5 条之后的包会被丢弃**（无后续规则）；概率递减保证「前几条随机、最后一条兜底全收」，且对每个端点命中率正好 1/N。删除/新增端点时 kube-proxy 会重建整条链。
 6. 两者是"同一份转发逻辑的两种内核实现"：iptables 用链式规则（第 11 章全套），ipvs 用哈希表 + 调度算法（`ipvsadm -Ln` 看到虚拟服务表）。切成 ipvs 后：`KUBE-SERVICES/KUBE-SVC-*/KUBE-SEP-*` 链不再存在，本章的 `iptables -t nat -L` 命令查不到 Service 规则——排障要改用 `ipvsadm -Ln`；但 ClusterIP/NodePort/Endpoints 的概念与排查顺序不变（§3.9 排障注意）。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

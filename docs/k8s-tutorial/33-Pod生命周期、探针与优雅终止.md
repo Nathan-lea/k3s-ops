@@ -1,5 +1,15 @@
 # 33 Pod 生命周期、探针与优雅终止
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 Pod 的完整生命周期（Pending → Running → Succeeded/Failed/Unknown）及各阶段含义
@@ -330,3 +340,12 @@ Waiting for deployment "web" rollout to finish: 1 out of 2 new replicas have bee
 - 探针参数：readiness `delay=2s/period=3s/failure=3`、liveness `delay=10s/period=5s/failure=3`
 
 > 演示结束后可按需清理：`kubectl --kubeconfig ./kubeconfig delete ns probe-demo`
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

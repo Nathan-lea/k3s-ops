@@ -1,5 +1,15 @@
 # 32 Rancher 多租户与 RBAC
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 01/07/10 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 Rancher 的多租户模型：**Global / Cluster / Project** 三个层级的权限边界
@@ -379,3 +389,12 @@ spec:
 7. `kubectl get globalrolebindings.management.cattle.io` → 绑定 `admin`/`cluster-owner` 等的用户即全局/集群管理员。区别：**全局管理员**对所有集群与全局资源有权限；`cluster-owner` 只对**某一个集群**拥有完全权限。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

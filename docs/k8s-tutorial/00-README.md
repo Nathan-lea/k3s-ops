@@ -7,10 +7,13 @@
 
 ## 环境速览
 
+> 以下为**本教程实测基线**（k3s v1.30.2+k3s2）。不同版本/拓扑下输出细节可能有差异。
+
 | 项目 | 值 |
 |------|-----|
 | 集群 | k3s-demo（k3s v1.30.2+k3s2，嵌入式 etcd） |
-| 节点 | k3s-demo-server-1（192.168.56.10，控制面）<br>k3s-demo-agent-1（192.168.56.20，工作节点） |
+| 默认拓扑（Linux/macOS） | k3s-demo-server-1（192.168.56.10，2c/4GB，控制面）<br>k3s-demo-agent-1（192.168.56.20，2c/4GB，工作节点） |
+| Windows ops VM 拓扑 | server-1（192.168.56.10，2c/4GB）<br>agent-1（192.168.56.20，2c/2GB）<br>ops（192.168.56.5，1c/1GB，运维 bastion，不加入集群） |
 | Ingress | nginx-ingress（HTTP :30080 / HTTPS :30444） |
 | Gateway API | NGINX Gateway Fabric（HTTP :30025，见第 37 章） |
 | 管理 UI | Rancher（https://192.168.56.10:30443） |
@@ -61,48 +64,21 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 
 ## 学习路径（推荐顺序）
 
-```
-入门阶段                      深入阶段                      进阶阶段
-┌──────────────┐   ┌──────────────────────┐   ┌─────────────────────────────┐
-│ 01 基础概念   │ → │ 05 存储与配置         │ → │ 09 实战演练(10+实验)      │
-│ 02 架构全景   │ → │ 06 调度与扩缩容       │ → │ 10 进阶之路(生产化)       │
-│ 03 工作负载   │ → │ 07 安全与RBAC         │   │ 11 iptables 与Service     │
-│ 04 网络与通讯 │ → │ 08 监控与备份         │   │ 12 etcd 深入使用          │
-└──────────────┘   └──────────────────────┘   │ 13 Label 与选择器           │
-                                              │ 14 kubectl 输出定制         │
-                                              │ 15 资源定义文件详解         │
-                                              │ 16 kubectl 命令集合         │
-                                              │ 17 资源落位详解             │
-                                              │ 18 Annotation 详解          │
-                                              │ 19 服务发现详解             │
-                                              │ 20 存储卷挂载详解           │
-                                              │ 21 四层与七层转发详解       │
-                                              │ 22 eBPF 与 Cilium 详解      │
-                                              │ 23 CNI 插件体系             │
-                                              │ 24 Helm 与 Chart 详解       │
-                                              │ 25 Kustomize 与 Helm 对比   │
-                                              │ 26 GitOps 与 Fleet/ArgoCD   │
-                                              │ 27 GitOps 仓库组织          │
-                                              │ 28 GitOps 与 Helm 实战      │
-                                              │ 29 私有仓库认证与安全       │
-                                              │ 30 混用 Kustomize/Helm      │
-                                              │ 31 Ingress 与证书管理       │
-                                              │ 32 Rancher 多租户与RBAC     │
-                                              │ 33 Pod 生命周期与探针       │
-                                              │ 34 资源治理 QoS 与 HPA      │
-                                              │ 35 NetworkPolicy 实战       │
-                                              │ 36 故障排查 Runbook         │
-                                              │ 37 Gateway API 入门         │
-                                              │ 38 PDB 与节点维护           │
-                                              │ 39 Pod 安全与安全上下文     │
-                                              │ 40 StatefulSet 与有状态应用 │
-                                              │ 41 Gateway API 进阶实战     │
-                                              │ 42 CRD 与 Operator 实战     │
-                                              │ 43 Kyverno 策略引擎         │
-                                              │ 44 Service 暴露与 LB        │
-                                              │ 45 装前服务器参数设置       │
-                                              └─────────────────────────────┘
-```
+> 章节可按主题跳读；首次学习建议按阶段顺序。具体前置见下方“章节依赖关系”。
+
+| 阶段 | 章节 | 目标 |
+|---|---|---|
+| 入门基础 | 01 基础概念、02 架构全景、03 工作负载、04 网络与通讯 | 建立 K8s/k3s 心智模型 |
+| 核心能力 | 05 存储与配置、06 调度与扩缩容、07 安全与RBAC、08 监控与备份 | 掌握日常部署与基础运维 |
+| 实战巩固 | 09 实战演练、10 进阶之路 | 综合演练并规划生产化方向 |
+| 对象与 kubectl | 13 Label、14 输出定制、15 资源定义、16 命令集合、17 资源落位、18 Annotation | 理解资源模型与 CLI 排障能力 |
+| 网络深入 | 11 iptables/Service、19 服务发现、21 四层七层、22 eBPF/Cilium、23 CNI、44 Service/LB | 理解流量路径与数据面 |
+| 存储与有状态 | 20 存储卷挂载、40 StatefulSet | 理解卷、PVC、状态化工作负载 |
+| Pod 与运行治理 | 33 生命周期/探针/优雅终止、34 资源治理/QoS/HPA、38 PDB/节点维护、39 Pod 安全上下文 | 提升工作负载可靠性与安全性 |
+| 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
+| GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
+| 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno | 建立访问控制与策略治理 |
+| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数 | 提升安装、备份、排障能力 |
 
 ### 章节依赖关系
 

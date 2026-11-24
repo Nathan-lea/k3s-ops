@@ -1,5 +1,15 @@
 # 43 Kyverno 策略引擎
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 24/35/39/42 |
+| 预计耗时 | 60-90 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 说清第 39 章 PSA（Pod Security Admission）的**边界**：它只是一个粗粒度的"三档围栏"，表达不了"镜像不能带 `:latest`"这类规则。
@@ -990,3 +1000,12 @@ kubectl --kubeconfig ./kubeconfig delete clusterpolicy require-team-label disall
 
 > Kyverno 属于本项目的常驻组件，已记入 `AGENTS.md`；本章策略以代码块形式给出，
 > **不新增仓库目录**（演示文件放 `~/kyverno-policies/`）。
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

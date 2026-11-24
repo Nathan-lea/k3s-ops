@@ -1,5 +1,15 @@
 # 36 Kubernetes 故障排查实战 Runbook
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/04/07/08 |
+| 预计耗时 | 45-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 掌握 Kubernetes 故障排查的结构化思路（观察 → 定位 → 验证 → 恢复 → 复盘）
@@ -305,3 +315,12 @@ Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 - **工作负载卡住**：`kubectl --kubeconfig ./kubeconfig rollout status deploy/<name> -n <ns>` + `kubectl --kubeconfig ./kubeconfig describe deploy/<name> -n <ns>`
 
 > 本章为只读排障演练，不创建额外资源；如需动手演练，可复用第 33 章的 `probe-demo` 命名空间，演示结束后按需清理：`kubectl --kubeconfig ./kubeconfig delete ns probe-demo`。
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

@@ -1,5 +1,15 @@
 # 12 etcd 深入使用：读取 / 查看 / 备份 / 恢复
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 08 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 中：etcd compact/restore 有风险；**restore 仅灾难演练时执行** |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 etcd 在集群中的地位：唯一的状态存储，所有资源（含 Secret）都在这
@@ -357,3 +367,12 @@ etcd 无 Rancher UI 页面（属集群基础设施）。对应查看方式：
 4. `sudo k3s etcd-snapshot save --name lab-weekly-snapshot`，list 中出现即可。
 5. 快照文件（在 server 节点的 `/var/lib/rancher/k3s/server/db/snapshots/`）拷到新机器同路径，恢复命令路径参数保持一致（`--cluster-reset-restore-path=/var/lib/rancher/k3s/server/db/snapshots/<快照名>`）；单机迁移时新机用同一 server-token 启动。多节点迁移需按官方文档逐个成员处理。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

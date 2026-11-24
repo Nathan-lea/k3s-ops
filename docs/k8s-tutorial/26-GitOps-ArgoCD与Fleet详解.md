@@ -1,5 +1,15 @@
 # 26 GitOps：让 Git 仓库当"唯一事实来源"（ArgoCD / Fleet）
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 15/24/25 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **GitOps 四原则**：声明式 / Git 唯一事实来源 / 自动同步（pull-based）/ 可观测可回滚
@@ -599,3 +609,12 @@ Rancher 里 Fleet 的界面就是 **Continuous Delivery**（持续交付）页�
 5. 已有 Rancher 多集群 → **Fleet**（Rancher 内置、零额外运维、天生多集群）；纯开源/不用 Rancher → **ArgoCD**（独立部署、生态成熟、UI 与定制能力强）。
 
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

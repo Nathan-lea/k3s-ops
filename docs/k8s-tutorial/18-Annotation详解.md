@@ -1,5 +1,15 @@
 # 18 Annotation 详解：概念、来源、查看与实战应用
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 13/15/17 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 Annotation（注解）的本质：**非标识性的 key/value 附加信息**，不参与选择，可承载任意字符串
@@ -360,3 +370,12 @@ kubectl -n lab get pvc nginx-data -o jsonpath='{.metadata.annotations.volume\.ku
 4. `revision` 由 Deployment 控制器写（每次模板变更 +1，2→3）；`restartedAt` 由 kubectl 写（rollout restart 时打时间戳，**正是它的注入导致模板哈希变化从而触发滚动**，revision 才变成 3）。
 5. `last-applied-configuration` 是 apply 三方合并（上次 apply 的 / 服务器现状 / 本次）的"上次"基准。没有它，apply 无法区分"服务器上的字段是我曾经声明的（应随我删）"还是"别人/系统后来加的（应保留）"——会错误覆盖。这也是 `kubectl create`（无此 annotation）与 `apply` 行为差异的根源之一。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```

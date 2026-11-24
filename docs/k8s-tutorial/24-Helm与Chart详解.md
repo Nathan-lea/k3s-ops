@@ -1,5 +1,15 @@
 # 24 Helm 与 Chart：把一个服务参数化，用版本管理生命周期
 
+## 章节信息
+
+| 项目 | 内容 |
+|------|------|
+| 适用平台 | Linux / macOS（标准路径）；Windows（ops VM 路径，在 ops VM 内执行 kubectl/脚本） |
+| 前置章节 | 03/15 |
+| 预计耗时 | 30-60 分钟 |
+| 破坏性操作 | 低：练习建议在独立 namespace（如 `lab`）中进行，避免污染现有资源 |
+| 实测环境 | k3s v1.30.2+k3s2，见 [00-README](00-README.md) |
+
 ## 本章目标
 
 - 理解 **Chart / values / 生命周期** 三个核心概念（安装包 / 参数开关 / 版本管理）
@@ -404,3 +414,12 @@ Rancher 内置 Helm 的图形化封装（本集群的 ingress-nginx/rancher 就�
 4. 报错类似 `Error: cannot re-use a name, the release "nginx-demo" already exists`（或 helm 提示用 `helm upgrade` 复用）——对应 6.1 表"manifest 冲突"一行的同类问题（同名 release 不可重复 install；同名资源则报 already exists）。
 5. `--keep-history` 把 release 的 Secret（含每次 revision 的完整 manifest）保留在集群里；`helm rollback <rev>` 就是读取那个 Secret 里的 manifest 重新 apply 并登记新 revision——所以只要档案在（Secret 在），卸载过也能整版还原。这也解释了为什么删除命名空间会连 history 一起没掉（Secret 在命名空间内）。
 </details>
+
+## 清理
+
+> 若本章创建了实验资源，请按章节中的清理步骤删除。若使用了独立 namespace（如 `lab`），可在确认无其他重要资源后删除整个 namespace：
+
+```bash
+# 仅在确认 lab 命名空间仅用于本章实验时执行
+kubectl delete ns lab --ignore-not-found
+```
