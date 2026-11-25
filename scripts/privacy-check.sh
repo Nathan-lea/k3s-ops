@@ -51,6 +51,8 @@ ALLOW_PATH_PATTERNS=(
   "/data/current"        # k3s 节点内置二进制固定路径 (/var/lib/rancher/k3s/data/current/...)
   "/data/test.txt"       # 05章容器内 PV 演示挂载路径（教程刻意内容）
   "/data/k8s-local-path" # production/ LOCALDISK_PATH 默认值（production/config/cluster.env.local.example）
+  "/data/important.txt"  # 48章容器内 PV 备份恢复演练标记文件（教程刻意内容）
+  "/data/version.txt"    # 48章容器内 PV 备份恢复演练版本文件（教程刻意内容）
 )
 
 # 检查脚本自身（内含正则字符串，不参与内容扫描）
