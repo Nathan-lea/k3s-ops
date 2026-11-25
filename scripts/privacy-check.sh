@@ -43,7 +43,8 @@ ALLOW_IPS=(
 # 已确认接受的演示占位密码（设计的一部分，用户明确选择不处理）
 # ChangeMe* 是 production/config/cluster.env.local.example 里的明文占位值，
 # 与真实凭据无关（真实值放 gitignore 掉的 cluster.env.local）。
-ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********' "s3cret" "abc" "ChangeMe")
+# S3cretP@ssw0rd! 是 50 章 Secret 管理教程的刻意演示密码；ENC[AES256_GCM 是 SOPS 加密占位。
+ALLOW_PASS_VALUES=("admin" "\${TOKEN}" '{{' '********' "s3cret" "abc" "ChangeMe" "S3cretP@ssw0rd!" "ENC[AES256_GCM" "db-source")
 
 # 已知的"非用户本地路径"（系统/容器/教程演示路径，不构成隐私泄漏）
 # 规则1 会拦截 /data/、/mnt/、/root/ 等疑似本机路径；以下为明确非本机数据路径，予以豁免。
