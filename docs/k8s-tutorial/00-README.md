@@ -73,7 +73,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 实战巩固 | 09 实战演练、10 进阶之路 | 综合演练并规划生产化方向 |
 | 对象与 kubectl | 13 Label、14 输出定制、15 资源定义、16 命令集合、17 资源落位、18 Annotation | 理解资源模型与 CLI 排障能力 |
 | 网络深入 | 11 iptables/Service、19 服务发现、21 四层七层、22 eBPF/Cilium、23 CNI、44 Service/LB | 理解流量路径与数据面 |
-| 存储与有状态 | 20 存储卷挂载、40 StatefulSet | 理解卷、PVC、状态化工作负载 |
+| 存储与有状态 | 20 存储卷挂载、40 StatefulSet、54 存储进阶与选型 | 理解卷、PVC、状态化工作负载与存储选型 |
 | Pod 与运行治理 | 33 生命周期/探针/优雅终止、34 资源治理/QoS/HPA、38 PDB/节点维护、39 Pod 安全上下文 | 提升工作负载可靠性与安全性 |
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
@@ -138,6 +138,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 51 k3s 内置组件与自动部署机制 | 02/08/10/24/44/45/46 | manifests/AddOn、HelmChart/HelmChartConfig、disable 语义、k3s 与上游 K8s 差异 |
 | 52 镜像仓库与离线交付 | 03/05/08/24/45/46/51 | registries.yaml、私有仓库认证/TLS、离线导入、Harbor/扫描/签名选型 |
 | 53 集群安全加固清单 | 07/32/35/39/43/50/52 | 安全盘点命令、RBAC/Secret/PSA/NetworkPolicy/审计/运行时加固清单 |
+| 54 存储进阶与选型 | 05/20/40/46/48/51/53 | local-path 边界、RWO/RWX/备份/扩容、NFS/Longhorn/Rook-Ceph 选型 |
 
 ---
 
@@ -218,3 +219,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [51 k3s 内置组件与自动部署机制](51-k3s内置组件与自动部署机制.md) | manifests/AddOn 自动部署、HelmChart/HelmChartConfig、disable 生命周期、k3s 运维差异 |
 | [52 镜像仓库与离线交付](52-镜像仓库与离线交付.md) | registries.yaml、私有仓库认证、离线导入、Harbor 与供应链安全选型 |
 | [53 集群安全加固清单](53-集群安全加固清单.md) | 身份/Secret/Pod/网络/节点/审计/备份分层加固清单与实测盘点 |
+| [54 存储进阶与选型](54-存储进阶与选型.md) | local-path 能力边界、NFS/Longhorn/Rook-Ceph 对比与生产存储决策 |
