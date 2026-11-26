@@ -257,6 +257,12 @@ kubectl --kubeconfig ./kubeconfig get pod <pod> -n <ns> -o yaml | grep -B2 -A5 f
 - 资源预案（requests/limits/LimitRange/ResourceQuota）
 - 探针调优（startupProbe/readinessProbe/livenessProbe）
 - 日常演练与文档固化
+
+### 可观测性联动（Observability）
+- 告警入口：Alertmanager/告警规则名称、触发时间、告警标签（namespace/pod/node）
+- Dashboard：Grafana 面板链接或截图路径、时间窗口、关键曲线
+- 日志查询：Loki/LogQL 或 `kubectl logs` 查询语句与时间范围
+- 审计事件：审计日志中相关对象的 create/update/delete/get secrets 事件（如已启用第 55 章）
 ```
 
 ---
@@ -276,6 +282,43 @@ Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 
 > 推荐“UI 先发现异常 → 命令行深挖证据（events+describe+logs）”，既高效又能保证证据完整。
 
+## 10. 与可观测性/审计联动
+
+Runbook 不应只写 kubectl 输出，还要把告警、Dashboard、日志和审计串起来。推荐按“**告警触发 → 指标确认 → 日志定位 → 审计溯源 → 修复验证**”走：
+
+| 阶段 | 入口 | 典型动作 | 对应章节 |
+|---|---|---|---|
+| 告警触发 | Alertmanager / 告警通知 | 确认告警名、严重级别、持续时间、受影响对象 | [47 监控告警实战](47-监控告警实战.md) |
+| 指标确认 | Grafana / Prometheus | 看 CPU/内存/重启/etcd/API/节点曲线，确定时间窗口 | [47 监控告警实战](47-监控告警实战.md) |
+| 日志定位 | Loki / Grafana Explore / `kubectl logs` | 用 namespace/pod/container/时间窗过滤，找到异常堆栈或事件前后文 | [49 日志采集实战](49-日志采集实战.md) |
+| 审计溯源 | API audit log | 查是谁在何时修改了 Deployment/Secret/ConfigMap/RBAC | [55 审计日志与Secrets加密实操](55-审计日志与Secrets加密实操.md) |
+| 修复验证 | kubectl / Dashboard / Alert | 确认资源恢复、告警解除、日志不再报错、审计记录变更动作 | 36/47/49/55 |
+
+### 10.1 最小联动示例
+
+```bash
+# 1) 告警触发后，先确认对象状态
+kubectl --kubeconfig ./kubeconfig get pods -A | grep -v Running
+
+# 2) 指标侧确认资源压力（已部署 metrics-server）
+kubectl --kubeconfig ./kubeconfig top nodes
+kubectl --kubeconfig ./kubeconfig top pods -A --sort-by=memory | head
+
+# 3) 日志侧定位（kubectl 快速查；集中日志用 Loki/LogQL）
+kubectl --kubeconfig ./kubeconfig logs -n <ns> <pod> -c <container> --previous --tail=200
+
+# 4) 审计侧溯源（已启用 55 章审计策略时）
+vagrant ssh k3s-demo-server-1 -c "sudo grep '<pod-or-resource-name>' /var/lib/rancher/k3s/server/logs/audit.log | tail -n 5"
+```
+
+Loki 中对应的最小 LogQL（按 49 章标签模型）：
+
+```logql
+{namespace="<ns>", pod="<pod>"} |= "error"
+```
+
+> 如果告警是“Secret 被异常读取/修改”，优先查审计日志（55），再查 RBAC/ServiceAccount（07/50/53）；不要只看应用日志。
+
 ---
 
 ## 动手练习
@@ -288,6 +331,7 @@ Rancher UI 在故障排障时也非常有用，可与命令行双向验证。
 6. **Terminating 卡住分析**：区分“preStop/SIGTERM 超时”和“Finalizer 阻塞”这两种情况的判断方法及处理原则（强调风险控制）。
 7. **Runbook 实战**：基于 §8 模板，从 `kubectl --kubeconfig ./kubeconfig get events -A --sort-by=.metadata.creationTimestamp | tail -20` 中任选一条事件填写一份最简 Runbook（现象→证据→可能根因→验证思路）。
 8. **节点压力排障**：执行 `kubectl --kubeconfig ./kubeconfig top nodes` 和 `kubectl --kubeconfig ./kubeconfig describe node k3s-demo-server-1 | grep -A5 Conditions`，判断当前节点是否存在压力，给出结论和依据。
+9. **可观测性联动**：假设收到 `PodRestartingTooMuch` 告警，写出你会如何在 47（指标/Dashboard）→ 49（LogQL/kubectl logs）→ 55（审计日志）之间切换，并给出每一步的证据。
 
 <details>
 <summary>参考答案</summary>
