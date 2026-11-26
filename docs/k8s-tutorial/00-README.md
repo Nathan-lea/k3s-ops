@@ -136,6 +136,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 49 日志采集实战 | 08/10/34/36/47 | Loki + Promtail + Grafana 轻量部署、LogQL 排障、日志保留与资源裁剪、实测镜像拉取坑 |
 | 50 Secret 管理进阶 | 05/07/27/29/43/46 | SOPS+age 安全入 Git、ESO 外部密钥同步、RBAC 明文可见边界、四方案选型 |
 | 51 k3s 内置组件与自动部署机制 | 02/08/10/24/44/45/46 | manifests/AddOn、HelmChart/HelmChartConfig、disable 语义、k3s 与上游 K8s 差异 |
+| 52 镜像仓库与离线交付 | 03/05/08/24/45/46/51 | registries.yaml、私有仓库认证/TLS、离线导入、Harbor/扫描/签名选型 |
 
 ---
 
@@ -214,3 +215,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [49 日志采集实战](49-日志采集实战.md) | Loki + Promtail + Grafana 轻量日志栈、LogQL 查错排障、保留期/资源裁剪、清理 |
 | [50 Secret 管理进阶](50-Secret管理进阶.md) | SOPS/SealedSecrets/ESO/Vault 对比、SOPS+age 加密入 Git、ESO 外部密钥同步、RBAC 边界 |
 | [51 k3s 内置组件与自动部署机制](51-k3s内置组件与自动部署机制.md) | manifests/AddOn 自动部署、HelmChart/HelmChartConfig、disable 生命周期、k3s 运维差异 |
+| [52 镜像仓库与离线交付](52-镜像仓库与离线交付.md) | registries.yaml、私有仓库认证、离线导入、Harbor 与供应链安全选型 |
