@@ -206,7 +206,7 @@ k3s-ops/
 │
 ├── ansible/                            # k3s 全生命周期管理
 │   ├── ansible.cfg
-│   ├── inventory.yml                   # 动态 Inventory（由 Vagrant/脚本生成）
+│   ├── inventory.yml                   # 占位 Inventory（tracked）；CLI 运行时生成 inventory.generated.yml
 │   ├── playbooks/                      # 剧本（k3s-cluster/install/add/remove/upgrade/backup/restore/deploy-*）
 │   ├── roles/
 │   │   ├── k3s-common/                 # OS 基础配置（sysctl/firewall/containerd/arch assert）
@@ -252,7 +252,7 @@ k3s-ops/
 cluster_name: k3s-demo
 
 # k3s 版本
-k3s_version: v1.30.2+k3s2
+k3s_version: v1.30.14+k3s2
 
 # 虚拟机网络配置
 network:

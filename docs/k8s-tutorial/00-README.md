@@ -7,11 +7,11 @@
 
 ## 环境速览
 
-> 以下为**本教程实测基线**（k3s v1.30.2+k3s2）。不同版本/拓扑下输出细节可能有差异；章节中标注“实测输出”的地方以当时环境为准。
+> 以下为**本教程当前基线**（k3s v1.30.14+k3s2，2026-11-26 由 v1.30.2+k3s2 同 minor 升级，见 [57 集群升级实战](57-集群升级实战.md)）。历史章节中标注“实测输出”的地方保留当时版本/日期，不批量改写。
 
 | 项目 | 值 |
 |------|-----|
-| 集群 | k3s-demo（k3s v1.30.2+k3s2，嵌入式 etcd） |
+| 集群 | k3s-demo（k3s v1.30.14+k3s2，嵌入式 etcd） |
 | 默认拓扑 profile（Linux/macOS，`vagrant/nodes.yml`） | k3s-demo-server-1（192.168.56.10，2c/4GB，控制面）<br>k3s-demo-agent-1（192.168.56.20，2c/4GB，工作节点） |
 | Windows ops VM profile（`win/nodes.windows.yml`） | server-1（192.168.56.10，2c/4GB）<br>agent-1（192.168.56.20，2c/2GB，受宿主机内存约束）<br>ops（192.168.56.5，1c/1GB，运维 bastion，不加入集群） |
 | Ingress | nginx-ingress（HTTP :30080 / HTTPS :30444） |
@@ -80,7 +80,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
 | 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno、50 Secret 管理进阶、53 安全加固清单、55 审计日志与 Secrets 加密 | 建立访问控制、密钥治理与策略治理 |
-| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维（标准流程+k3s-ops）、47 监控告警实战、48 备份恢复演练、49 日志采集实战、51 k3s 内置组件与自动部署机制、52 镜像仓库与离线交付、56 节点扩缩容实战 | 提升安装、交付、备份、恢复、扩缩容、排障、可观测能力 |
+| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维（标准流程+k3s-ops）、47 监控告警实战、48 备份恢复演练、49 日志采集实战、51 k3s 内置组件与自动部署机制、52 镜像仓库与离线交付、56 节点扩缩容实战、57 集群升级实战 | 提升安装、交付、备份、恢复、扩缩容、升级、排障、可观测能力 |
 
 ### 章节依赖关系
 
@@ -233,3 +233,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [54 存储进阶与选型](54-存储进阶与选型.md) | local-path 能力边界、NFS/Longhorn/Rook-Ceph 对比与生产存储决策 |
 | [55 审计日志与Secrets加密实操](55-审计日志与Secrets加密实操.md) | 启用/验证/回滚 API 审计日志与 k3s secrets encryption |
 | [56 节点扩缩容实战](56-节点扩缩容实战.md) | nodes.yml/Vagrant/Ansible/k3s-ops 视角的 add/remove node 双轨流程、检查清单、实测边界与清理 |
+| [57 集群升级实战](57-集群升级实战.md) | 同 minor patch 升级标准流程、etcd 快照门禁、server->agent 顺序、Kyverno 风险、`k3s-ops.sh upgrade -v` 边界 |

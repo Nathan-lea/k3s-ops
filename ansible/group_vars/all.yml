@@ -3,7 +3,7 @@
 cluster_name: "{{ cluster_name | default('k3s-demo') }}"
 
 # k3s 安装
-k3s_version: "{{ k3s_version | default('v1.30.2+k3s2') }}"
+k3s_version: "{{ k3s_version | default('v1.30.14+k3s2') }}"
 k3s_install_dir: /usr/local/bin
 k3s_config_dir: /etc/rancher/k3s
 k3s_data_dir: /var/lib/rancher/k3s
@@ -31,7 +31,7 @@ k3s_arch_suffix: "{{ k3s_arch_map[ansible_architecture | default('x86_64')] | de
 
 # k3s 下载地址（k3s 可执行文件，不是容器镜像）
 # 默认走 Rancher 中国镜像：github.com 在部分网络不可达。
-# 镜像路径用 - 而非 +：v1.30.2+k3s2 → v1.30.2-k3s2
+# 镜像路径用 - 而非 +：v1.30.14+k3s2 → v1.30.14-k3s2
 # 文件名按架构：amd64=k3s，arm64=k3s-arm64（rancher-mirror/GitHub 已验证一致）
 k3s_download_url: >-
   https://rancher-mirror.rancher.cn/k3s/{{ k3s_version | replace('+', '-') }}/k3s{{ k3s_arch_suffix }}

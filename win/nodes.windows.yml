@@ -7,7 +7,7 @@
 # 内存不足时把 agent-1 调到 1536，或把 ops 调到 768；不要动 server-1。
 
 cluster_name: k3s-demo
-k3s_version: v1.30.2+k3s2
+k3s_version: v1.30.14+k3s2
 
 network:
   subnet: 192.168.56.0/24
