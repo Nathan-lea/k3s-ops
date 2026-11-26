@@ -6,6 +6,8 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 VAGRANT_DIR="${SELF_DIR}/vagrant"
 ANSIBLE_DIR="${SELF_DIR}/ansible"
 PLAYBOOK_DIR="${ANSIBLE_DIR}/playbooks"
+NODES_YML="${VAGRANT_DIR}/nodes.yml"
+GENERATED_INVENTORY="${ANSIBLE_DIR}/inventory.generated.yml"
 
 source "${SELF_DIR}/lib/logging.sh"
 source "${SELF_DIR}/lib/nodes.sh"
@@ -47,11 +49,64 @@ EOF
   exit 0
 }
 
-# --- Helper: run ansible-playbook with inventory ---
+# --- Helpers ---
+is_ops_vm_context() {
+  [ -n "${K3S_OPS_SHIM_CONFIG:-}" ] && [ -f "${K3S_OPS_SHIM_CONFIG}" ] && return 0
+  [ -f "${HOME}/.k3s-ops-shim.json" ] && return 0
+  [ -d "${HOME}/.ssh/k3s-ops" ] && return 0
+  return 1
+}
+
+inventory_key_args() {
+  if is_ops_vm_context; then
+    printf '%s\n' --key-mode flat --key-dir "${HOME}/.ssh/k3s-ops"
+    return 0
+  fi
+
+  local vagrant_dir="${SELF_DIR}/.vagrant"
+  local first_host="${CLUSTER_NAME}-${FIRST_SERVER_NAME:-server-1}"
+  local vagrant_key="${vagrant_dir}/machines/${first_host}/virtualbox/private_key"
+  if [ -f "${vagrant_key}" ]; then
+    printf '%s\n' --key-mode vagrant --vagrant-dir "${vagrant_dir}" --provider virtualbox
+    return 0
+  fi
+
+  # 回退：flat key-dir（适合预分发 key 或自定义环境），由调用方自行保证 key 存在
+  printf '%s\n' --key-mode flat --key-dir "${HOME}/.ssh/k3s-ops"
+}
+
+ensure_inventory() {
+  local inventory="${K3S_OPS_INVENTORY:-${GENERATED_INVENTORY}}"
+  local -a key_args=()
+  while IFS= read -r _arg; do
+    [ -n "${_arg}" ] && key_args+=("${_arg}")
+  done < <(inventory_key_args)
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    log_error "python3 is required to generate Ansible inventory"
+    exit 1
+  fi
+  if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+    log_error "PyYAML is required: python3 -c 'import yaml' failed"
+    exit 1
+  fi
+
+  python3 "${SELF_DIR}/scripts/gen-inventory.py" \
+    --nodes "${NODES_YML}" \
+    --out "${inventory}" \
+    "${key_args[@]}" >/dev/null
+  echo "${inventory}"
+}
+
+# --- Helper: run ansible-playbook with generated inventory ---
 run_playbook() {
   local playbook="$1"
   shift
-  ansible-playbook -i "${ANSIBLE_DIR}/inventory.yml" \
+  local inventory
+  inventory="$(ensure_inventory)"
+  export ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-${ANSIBLE_DIR}/ansible.cfg}"
+  log_debug "Using inventory ${inventory}"
+  ansible-playbook -i "${inventory}" \
     "${PLAYBOOK_DIR}/${playbook}" \
     "$@"
 }
@@ -67,10 +122,11 @@ nodes = cfg.get('nodes', [])
 servers = [n for n in nodes if n['role'] == 'server']
 agents = [n for n in nodes if n['role'] == 'agent']
 
-print(f'CLUSTER_NAME={cfg[\"cluster_name\"]}')
-print(f'FIRST_SERVER_IP={servers[0][\"ip\"]}')
-print(f'FIRST_SERVER_HOST={cfg[\"cluster_name\"]}-{servers[0][\"name\"]}')
-print(f'K3S_VERSION={cfg[\"k3s_version\"]}')
+print('CLUSTER_NAME=' + cfg['cluster_name'])
+print('FIRST_SERVER_IP=' + servers[0]['ip'])
+print('FIRST_SERVER_NAME=' + servers[0]['name'])
+print('FIRST_SERVER_HOST=' + cfg['cluster_name'] + '-' + servers[0]['name'])
+print('K3S_VERSION=' + cfg['k3s_version'])
 "
 }
 

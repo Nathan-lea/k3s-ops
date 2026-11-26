@@ -63,7 +63,7 @@ fi
 assert_inv "${INV_A}" "inv['all']['vars']['cluster_name'] == 'k3s-demo'" "透传 cluster_name"
 assert_inv "${INV_A}" "inv['all']['vars']['first_server_ip'] == '192.168.56.10'" "first_server_ip 来自拓扑"
 assert_inv "${INV_A}" "inv['all']['vars']['first_server_host'] == 'k3s-demo-server-1'" "first_server_host 用完整主机名"
-assert_inv "${INV_A}" "inv['all']['vars']['k3s_version'] == 'v1.30.2+k3s2'" "透传 k3s_version"
+assert_inv "${INV_A}" "inv['all']['vars']['k3s_version'] == 'v1.30.14+k3s2'" "透传 k3s_version"
 assert_inv "${INV_A}" "'containerd_mirrors' not in inv['all']['vars']" "不复制 group_vars 已定义的值（containerd_mirrors）"
 assert_inv "${INV_A}" "'k3s_download_url' not in inv['all']['vars']" "不复制 group_vars 已定义的值（k3s_download_url）"
 assert_inv "${INV_A}" "sorted(inv['all']['children']['server']['hosts']) == ['k3s-demo-server-1']" "server 组"
@@ -139,7 +139,18 @@ else
   bad "自检失败 rc=${rc}: ${out}"
 fi
 
-section "G. 仓库敏感文件未被测试改动"
+section "G. vagrant key-mode"
+INV_G="${TMP}/inv-g.yml"
+out="$("${GEN}" --nodes "${PROJECT_DIR}/vagrant/nodes.yml" --out "${INV_G}" --key-mode vagrant --vagrant-dir /tmp/test-vagrant --provider virtualbox 2>&1)"; rc=$?
+if [ "${rc}" -eq 0 ]; then
+  ok "vagrant key-mode 生成成功"
+else
+  bad "vagrant key-mode 生成失败 rc=${rc}: ${out}"
+fi
+assert_inv "${INV_G}" "hostvars['k3s-demo-server-1']['ansible_ssh_private_key_file'] == '/tmp/test-vagrant/machines/k3s-demo-server-1/virtualbox/private_key'" "vagrant key-mode 使用 .vagrant machines 路径"
+assert_inv "${INV_G}" "hostvars['k3s-demo-agent-1']['ansible_ssh_private_key_file'] == '/tmp/test-vagrant/machines/k3s-demo-agent-1/virtualbox/private_key'" "agent 也使用 vagrant key 路径"
+
+section "H. 仓库敏感文件未被测试改动"
 assert_repo_untouched
 
 finish "test-gen-inventory"

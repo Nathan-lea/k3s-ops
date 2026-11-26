@@ -9,6 +9,9 @@ kubeconfig
 /tmp/ansible-cache/
 *.retry
 
+# k3s-ops CLI 生成的运行时 inventory（避免污染 tracked placeholder）
+ansible/inventory.generated.yml
+
 # 系统文件
 .DS_Store
 Thumbs.db
@@ -26,3 +29,7 @@ docs/manual-deployment-2.md
 
 # 教程实验用本地清单（内容内联在对应章节文档里，文件由读者按文档创建）
 /tmp/
+
+# Python cache
+__pycache__/
+*.pyc

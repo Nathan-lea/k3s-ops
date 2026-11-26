@@ -59,9 +59,11 @@ case "${1:-}" in
     printf '%-28s %s\n' "kubectl"     "$(kubectl version --client 2>/dev/null | head -1 || echo MISSING)"
     printf '%-28s %s\n' "helm"        "$(helm version --short 2>/dev/null || echo MISSING)"
     printf '%-28s %s\n' "vagrant(shim)" "$(vagrant --help >/dev/null 2>&1 && echo OK || echo MISSING)"
-    printf '%-28s %s\n' "inventory"   "$([ -s ansible/inventory.yml ] && echo OK || echo MISSING)"
+    local inv="ansible/inventory.generated.yml"
+    [ -s "${inv}" ] || inv="ansible/inventory.yml"
+    printf '%-28s %s\n' "inventory"   "$([ -s "${inv}" ] && echo OK || echo MISSING)"
     printf '%-28s %s\n' "ANSIBLE_CONFIG" "${ANSIBLE_CONFIG}"
-    ansible-inventory -i ansible/inventory.yml --list >/dev/null 2>&1 \
+    ansible-inventory -i "${inv}" --list >/dev/null 2>&1 \
       && echo "inventory 可解析: OK" || { echo "inventory 可解析: FAIL" >&2; rc=1; }
     exit "${rc}"
     ;;

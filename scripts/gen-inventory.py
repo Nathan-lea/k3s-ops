@@ -12,11 +12,16 @@ ansible_user、私钥路径、node_role、node_ip、first_server_ip 等变量。
     k3s-add-agent.yml、k3s-remove-node.yml 的 hosts: 就是这三个组名，而 Vagrant
     从不生成它们，所以 add-node/remove-node 此前一直是静默空跑。实际选中哪台
     由 k3s-ops.sh 传入的 -l <host> 决定。
+  * 支持两种 SSH 私钥定位模式：
+      - flat（默认）：<key-dir>/<full-hostname>，适合 Windows ops VM / 预分发 key
+      - vagrant：<vagrant-dir>/machines/<full-hostname>/<provider>/private_key，
+        适合 Linux/macOS 宿主机直接对 Vagrant VirtualBox VM 运行 Ansible
 
 用法：
   scripts/gen-inventory.py                          # 写 ansible/inventory.yml
   scripts/gen-inventory.py --nodes win/nodes.windows.yml --stdout
   scripts/gen-inventory.py --key-dir ~/.ssh/k3s-ops --check
+  scripts/gen-inventory.py --key-mode vagrant --vagrant-dir .vagrant --stdout
 """
 
 import argparse
@@ -34,6 +39,7 @@ PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_NODES = os.path.join(PROJECT_DIR, "vagrant", "nodes.yml")
 DEFAULT_OUT = os.path.join(PROJECT_DIR, "ansible", "inventory.yml")
 DEFAULT_KEY_DIR = "~/.ssh/k3s-ops"
+DEFAULT_VAGRANT_DIR = os.path.join(PROJECT_DIR, ".vagrant")
 
 
 def die(msg):
@@ -57,20 +63,32 @@ def load_nodes(path):
     return cfg, k8s, servers[0]
 
 
-def host_entry(node, cluster_name, key_dir, user):
+def resolve_private_key(node, cluster_name, key_dir, key_mode, vagrant_dir, provider):
+    host = "%s-%s" % (cluster_name, node["name"])
+    if key_mode == "vagrant":
+        return os.path.join(vagrant_dir, "machines", host, provider, "private_key")
+    return os.path.join(key_dir, host)
+
+
+def host_entry(node, cluster_name, key_dir, user, key_mode, vagrant_dir, provider):
     host = "%s-%s" % (cluster_name, node["name"])
     return host, {
         "ansible_host": node["ip"],
         "node_role": node["role"],
         "node_ip": node["ip"],
         "ansible_user": user,
-        "ansible_ssh_private_key_file": os.path.join(key_dir, host),
+        "ansible_ssh_private_key_file": resolve_private_key(
+            node, cluster_name, key_dir, key_mode, vagrant_dir, provider
+        ),
     }
 
 
-def build(cfg, k8s, first_server, key_dir, user):
+def build(cfg, k8s, first_server, key_dir, user, key_mode, vagrant_dir, provider):
     cluster_name = cfg.get("cluster_name") or "k3s"
-    host_map = dict(host_entry(n, cluster_name, key_dir, user) for n in k8s)
+    host_map = dict(
+        host_entry(n, cluster_name, key_dir, user, key_mode, vagrant_dir, provider)
+        for n in k8s
+    )
 
     all_vars = {
         "cluster_name": cluster_name,
@@ -154,7 +172,13 @@ def main(argv=None):
     ap.add_argument("--nodes", default=DEFAULT_NODES, help="拓扑文件（默认 %(default)s）")
     ap.add_argument("--out", default=DEFAULT_OUT, help="输出文件（默认 %(default)s）")
     ap.add_argument("--key-dir", default=DEFAULT_KEY_DIR,
-                    help="每台主机的私钥目录，文件名用完整主机名（默认 %(default)s）")
+                    help="flat 模式下的私钥目录，文件名用完整主机名（默认 %(default)s）")
+    ap.add_argument("--key-mode", choices=("flat", "vagrant"), default="flat",
+                    help="私钥定位模式：flat=<key-dir>/<host>；vagrant=<vagrant-dir>/machines/<host>/<provider>/private_key")
+    ap.add_argument("--vagrant-dir", default=DEFAULT_VAGRANT_DIR,
+                    help="vagrant 模式下的 .vagrant 目录（默认 %(default)s）")
+    ap.add_argument("--provider", default="virtualbox",
+                    help="vagrant 模式下的 provider（默认 %(default)s）")
     ap.add_argument("--user", default="vagrant", help="SSH 用户（默认 %(default)s）")
     ap.add_argument("--stdout", action="store_true", help="打印到标准输出，不写文件")
     ap.add_argument("--check", action="store_true", help="写出后用 ansible-inventory 自检")
@@ -162,7 +186,10 @@ def main(argv=None):
 
     cfg, k8s, first_server = load_nodes(os.path.abspath(os.path.expanduser(args.nodes)))
     key_dir = os.path.abspath(os.path.expanduser(args.key_dir))
-    data = build(cfg, k8s, first_server, key_dir, args.user)
+    vagrant_dir = os.path.abspath(os.path.expanduser(args.vagrant_dir))
+    data = build(
+        cfg, k8s, first_server, key_dir, args.user, args.key_mode, vagrant_dir, args.provider
+    )
 
     if args.stdout:
         sys.stdout.write(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))

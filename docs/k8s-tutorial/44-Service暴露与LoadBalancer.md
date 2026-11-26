@@ -189,7 +189,7 @@ disable:
 
 所以**改 `nodes.yml` 的开关就能生效**（无需先改模板）。
 
-**坑 2：`k3s-ops.sh install` 是空跑。** 它走的是 `ansible/inventory.yml`，而该文件是**占位空清单**：
+**坑 2（已修复）：`k3s-ops.sh install` 的空跑边界。** `ansible/inventory.yml` 仍是 tracked 占位清单；当前 `k3s-ops.sh` 会从 `vagrant/nodes.yml` 生成运行时 `ansible/inventory.generated.yml`（gitignored）并显式设置 `ANSIBLE_CONFIG`。若你看到旧行为/旧文档，请以运行时生成 inventory 为准；首次建机仍建议 `k3s-ops.sh up`（Vagrant provisioner）。
 
 ```text
 $ ansible-playbook -i inventory.yml playbooks/k3s-cluster.yml --list-hosts
