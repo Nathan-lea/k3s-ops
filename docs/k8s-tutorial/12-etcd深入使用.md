@@ -350,6 +350,15 @@ etcd 无 Rancher UI 页面（属集群基础设施）。对应查看方式：
 | etcdctl 无 version 命令 | — | 新版 etcdctl 移除 `version` 子命令，用 `etcdctl --version` 或 `endpoint status` 的 VERSION 列 |
 | 恢复后部分资源不对 | `kubectl get ...` 逐个核对 | 确认快照时间点；必要时重放快照后变更 |
 
+## 8. 常见坑与排障
+
+| 现象 | 原因 | 排查 | 处理 |
+|------|------|------|------|
+| `etcdctl` 报证书/连接错误 | 没带 k3s 本地 etcd 的 CA/cert/key/endpoint | `sudo ls /var/lib/rancher/k3s/server/tls/etcd/`；确认 endpoint `https://127.0.0.1:2379` | 使用 k3s 内置证书参数；只在 server 节点本地执行 |
+| 快照保存看似失败或有 warning | `k3s etcd-snapshot` 读到 server 专用 config 参数，输出 `Unknown flag ... skipping` | 看最后是否有 `Snapshot ... saved.`；`k3s etcd-snapshot list` | warning 可忽略；无 saved 记录时查磁盘空间和 k3s 日志 |
+| 恢复快照后集群异常/节点不一致 | 恢复是破坏性集群级操作，流程/时机/成员处理不当 | `kubectl get nodes`；`journalctl -u k3s`；核对快照时间点 | 生产前先停业务流量、备份当前数据；单机/多节点按官方流程分别处理，勿盲目执行 |
+| DB SIZE 持续增长 | 历史 revision 积累，compact/defrag 未做或未生效 | `etcdctl endpoint status -w table`；观察 DB SIZE 与 revision | 评估后做 compaction/defrag；确认自动快照/压缩策略；避免频繁大对象写入 |
+
 ## 动手练习
 
 1. 用 `endpoint status -w table` 记录当前 DB SIZE 和 raft index，一周后再对比（观察增长）。

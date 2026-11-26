@@ -308,6 +308,15 @@ kubectl --kubeconfig ./kubeconfig delete ns lb-demo
 
 ---
 
+## 11. 常见坑与排障
+
+| 现象 | 原因 | 排查 | 处理 |
+|------|------|------|------|
+| `LoadBalancer` 一直 `<pending>` | ServiceLB 关闭且无云 LB/MetalLB 控制器 | `kubectl -n kube-system get ds | grep svclb`；检查 k3s `disable: servicelb` | 预期行为则改用 NodePort/Ingress；需要 LB 时按 8.x 开启 ServiceLB 或装 MetalLB/云 LB |
+| 开启 ServiceLB 后端口冲突/Pod Pending | `hostPort` 与现有 NodePort/hostPort 冲突（如 80/443） | `kubectl -n kube-system describe pod <svclb-pod>`；`ss -lntp | grep :80` | 避开冲突端口；不要与 Ingress/NodePort 混抢；生产优先 MetalLB/云 LB |
+| 改了 `disable_servicelb` 但行为没变 | 只改模板/节点配置未生效，或改的是 `k3s-ops.sh install` 走不到的路径 | 检查 `/etc/rancher/k3s/config.yaml`；确认是 vagrant provision/手动改+重启 | 按 8.2/8.3 正确下发并重启 k3s；不要误以为 `k3s-ops.sh install` 会自动应用 |
+| ServiceLB/MetalLB/云 LB 混用异常 | 多个 LB 实现抢 `LoadBalancer` Service | 检查 cloud-controller-manager、MetalLB、ServiceLB DaemonSet | 同一集群只保留一种 LB 实现；迁移前先清理旧控制器 |
+
 ## 动手练习
 
 1. **观察 pending**：建一个 `type: LoadBalancer` 的 Service，观察 `EXTERNAL-IP` 是否 `<pending>`，并解释为什么。

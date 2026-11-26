@@ -286,6 +286,15 @@ Rancher 的权限模型（全局角色/集群角色/项目角色）**映射到�
 - `kubectl auth can-i ... --as=<身份>` 是权限排障第一工具
 - 最小权限原则永远适用
 
+## 6. 常见坑与排障
+
+| 现象 | 原因 | 排查 | 处理 |
+|------|------|------|------|
+| `kubectl` 返回 `Forbidden` | 身份没有对应 Role/ClusterRole，或 Binding 作用域/主体写错 | `kubectl auth can-i <verb> <resource> -n <ns> --as=system:serviceaccount:<ns>:<sa>`；检查 RoleBinding/ClusterRoleBinding | 修正 Role rules、Binding subject 或命名空间；遵循最小权限 |
+| Role 改了但权限没变 | 绑的是另一个 Role/ClusterRole，或改错 namespace | `kubectl -n <ns> get rolebinding <name> -o yaml`；`kubectl describe clusterrolebinding <name>` | 确认 Binding 引用的 `roleRef` 和 subject；在正确命名空间修改 |
+| ServiceAccount 能 `get pods` 但不能 `get pods/log` | 子资源未授权 | `kubectl auth can-i get pods/log -n <ns> --as=...`；检查 Role rules 是否含 `pods/log` | 在 Role 中补充子资源 `pods/log`、`pods/exec` 等 |
+| 以为“看不到 Secret”就绝对安全 | exec/创建 Pod 挂载 Secret/cluster-admin 仍可间接读取 | 审计 RBAC：`pods/exec`、`create pods`、`secrets`、`cluster-admin` 绑定 | 把 Secret 读取、exec、Pod 创建纳入威胁模型；启用审计（见 55 章） |
+
 ## 动手练习
 
 1. 用 `--as` 验证 lab-user 能否 `get secrets`（预期 no）、能否 `list pods`（预期 yes）。

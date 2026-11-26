@@ -344,7 +344,16 @@ sudo ipvsadm -Ln
 
 > 排障注意：集群若跑了 ipvs 模式，本章的 `iptables -L` 命令会查不到 `KUBE-SVC-*` 链（它们根本不存在）——先 `ipvsadm -Ln` 确认真实规则，别拿 iptables 的结论硬套。**看规则前先确认 proxy 模式**。
 
-## 4. Rancher 界面对照
+## 4. 常见坑与排障
+
+| 现象 | 原因 | 排查 | 处理 |
+|------|------|------|------|
+| Service 有 ClusterIP 但访问不通 | Endpoints 为空，或 kube-proxy 规则未生成 | `kubectl -n <ns> get ep <svc>`；节点上 `iptables -t nat -S | grep <svc-clusterip>` | 修 selector/Pod readiness；检查 kube-proxy/k3s 日志和节点网络 |
+| NodePort 只在部分节点通 | 节点防火墙、kube-proxy 异常、Pod 只在特定节点且路由异常 | 各节点 `ss -lntp | grep <nodeport>`；`iptables -t nat -L KUBE-NODEPORTS -n`；查 Pod 分布 | 放行端口；检查 k3s-agent/kube-proxy；确认 CNI/路由正常 |
+| 看到的规则与书上不一致 | iptables-nft/nftables、k3s 版本、ipvs 模式或规则优化差异 | `iptables --version`；`kubectl -n kube-system logs ds/kube-proxy`（如有）；检查 k3s 配置 | 以实际数据面为准；优先用 `kubectl get svc,ep` 和 conntrack/抓包验证 |
+| 客户端看到源 IP 变成节点 IP | NodePort/外部流量经过 SNAT（`KUBE-MARK-MASQ`） | `iptables -t nat -L KUBE-POSTROUTING -n -v`；检查 Service `externalTrafficPolicy` | 需要保留源 IP 时评估 `externalTrafficPolicy: Local`、Ingress/LB 方案及流量分布影响 |
+
+## 5. Rancher 界面对照
 
 iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式：
 
@@ -352,7 +361,7 @@ iptables 规则在节点内核里，Rancher UI 没有直接页面。对照方式
 - **节点 Shell**：Rancher 的 Node → 某节点 → **⋮ → Launch Kubectl / Execute Shell**，可以进节点跑 `iptables` 命令（需要 root）
 - 流量不通时排查顺序：UI 看 Service/Endpoints → 节点上 `kubectl get endpoints` → `iptables -t nat -L KUBE-SERVICES -n`（规则是否存在）→ `-L KUBE-SVC-*`（分配链是否存在）
 
-## 5. 小结
+## 6. 小结
 
 - Service 是「期望状态 + iptables 规则」：ClusterIP 不挂网卡，转发全靠节点上的规则
 - 三层链：`KUBE-SERVICES`（总入口匹配）→ `KUBE-SVC-*`（概率分配）→ `KUBE-SEP-*`（DNAT 到 Pod）
