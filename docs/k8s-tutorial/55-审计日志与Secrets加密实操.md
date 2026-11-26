@@ -269,17 +269,43 @@ vagrant ssh k3s-demo-server-1 -c "sudo rm -f /var/lib/rancher/k3s/server/audit-p
 
 ---
 
-## 6. 注意事项
+## 6. 常见坑与排障
 
-1. **不要把 Secret 内容写进审计日志**：对 Secret 资源使用 `Metadata`，避免 Request/RequestResponse 泄露明文。
-2. **secrets encryption 不替代 RBAC/外部密钥方案**：它保护 etcd 落盘，不保护 API 读取路径。
-3. **回滚要按流程**：不要只删配置。应先 disable + reencrypt，再恢复配置重启。
-4. **HA 集群更复杂**：多 server 需要按 K3s 文档逐台/按阶段处理，不能照搬单 server 快速步骤。
-5. **审计日志要有落盘和轮转策略**：本章用 `maxage/maxbackup/maxsize` 做最小控制；生产应接入集中日志并设置告警。
+| 现象 | 原因 | 处理 |
+|------|------|------|
+| 重启后 API 报 `identity transformer tried to read encrypted data` | 先去掉 `secrets-encryption` 配置重启，但对象仍是加密状态/`encryption-config.json` 残留 | 临时恢复 `secrets-encryption: true` 并重启；执行 `sudo k3s secrets-encrypt reencrypt --force --skip`，确认 `Disabled/start`；再移除配置重启 |
+| `k3s secrets-encrypt status` 显示 Disabled，但 `cred/encryption-config.json` 仍存在 | 回滚残留文件 | 确认 status Disabled、集群正常；备份后在维护窗口删除，重启 k3s 验证 nodes Ready 和 Secret 可读 |
+| `/var/lib/rancher/k3s/server/logs/audit.log` 无记录 | 策略路径/权限错误、`kube-apiserver-arg` 未生效或未重启 | 检查策略文件与 config.yaml 参数；`systemctl restart k3s`；再执行触发请求 |
+| 审计日志记录了 Secret 明文 | secrets 规则用了 `Request`/`RequestResponse` | secrets 规则固定 `Metadata`；轮转/清理受影响日志，评估泄露范围并轮换 Secret |
 
----
+## 7. 动手练习
 
-## 7. 小结
+1. **策略最小化**：写一个只记录 `kube-system` 中 Secret `get/list/watch` Metadata 事件的 Audit Policy，并说明为什么不能记录 Request body。
+2. **回滚演练（沙箱）**：复现“未 reencrypt 完成就移除 secrets-encryption 配置”的故障，按正确顺序恢复并记录验收命令。
+3. **Runbook 证据**：为 36 章补一条“Secret 异常访问”场景，给出 audit log grep 命令，并标注哪些字段必须脱敏。
+
+## 8. 清理
+
+> 本章已包含回滚；清理以“无实验残留、集群恢复基线”为准。
+
+```bash
+# 删除实验 namespace（如仍存在）
+kubectl --kubeconfig ./kubeconfig delete ns ch55-audit-demo --ignore-not-found
+
+# server 节点清理实验文件（确认不再需要）
+vagrant ssh k3s-demo-server-1 -c "sudo rm -f /var/lib/rancher/k3s/server/audit-policy.yaml /etc/rancher/k3s/config.yaml.bak.ch55 && sudo rm -rf /var/lib/rancher/k3s/server/logs && sudo mkdir -p /var/lib/rancher/k3s/server/logs"
+
+# 确认 config.yaml 无实验参数
+vagrant ssh k3s-demo-server-1 -c "sudo grep -n 'secrets-encryption\|audit-log\|audit-policy' /etc/rancher/k3s/config.yaml || echo no-audit-secrets-config"
+
+# 最终验证
+kubectl --kubeconfig ./kubeconfig get nodes
+vagrant ssh k3s-demo-server-1 -c "sudo k3s secrets-encrypt status 2>&1 | tail -5"
+```
+
+若存在回滚遗留备份（如 server-1 root 用户家目录下的 `encryption-config.json.bak.ch55`），观察一段时间无异常后再删除；删除前确认 status 为 Disabled 且重启验证通过。
+
+## 9. 小结
 
 - Audit Log 回答“谁做了什么”；Secrets Encryption 回答“etcd 落盘是否加密”。
 - 在 k3s v1.30.2+k3s2 单 server 实测中，启用 `secrets-encryption: true` 并重启后可看到加密配置和 `Enabled` 状态；测试 Secret 明文未在 etcd db 文件中命中。

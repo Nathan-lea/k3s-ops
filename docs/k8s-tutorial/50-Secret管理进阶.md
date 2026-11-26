@@ -466,7 +466,13 @@ in API group "" in the namespace "secret-lab"
 
 ---
 
-## 8. 清理
+## 8. 动手练习
+
+1. **SOPS 实操**：用 age 生成测试密钥，加密一个包含 `username/password` 的 Secret，确认 Git 中只有密文；再用 `sops -d` 验证解密结果。
+2. **ESO 故障注入**：把 ExternalSecret 的 `remoteRef.key` 改错，观察 `status.conditions`/events 的报错，再恢复正确值确认 Secret 同步。
+3. **RBAC 边界**：用只读账号验证 `get secrets` 被拒绝；再思考为什么“能 exec Pod / 创建 Pod 挂载 Secret / cluster-admin”仍可能拿到明文，并写出防护措施。
+
+## 9. 清理
 
 ```bash
 # 删除演示资源
@@ -485,14 +491,14 @@ rm -rf /tmp/opencode/ch50
 
 ---
 
-## 9. 小结
+## 10. 小结
 
 - **安全进 Git**：SOPS/SealedSecrets 解决“仓库里不要明文”；SOPS 更轻，SealedSecrets 更贴 GitOps 控制器模式。
 - **外部密钥源**：ESO 把 Vault/云 Secret Manager/企业密钥系统作为真源同步进 K8s；应用仍可消费普通 Secret。
 - **看不到明文**：RBAC 可以做到“无 secrets 读取权限就看不到”；但不能细粒度隐藏 Secret 内某个字段，也挡不住 `cluster-admin` 或通过 Pod 注入/exec 的间接读取路径。
 - **生产选型**：小团队先 SOPS；已有外部密钥平台上 ESO；强合规/动态凭据再上 Vault。
 
-## 参考
+## 11. 参考
 
 - [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
