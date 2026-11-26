@@ -77,7 +77,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | Pod 与运行治理 | 33 生命周期/探针/优雅终止、34 资源治理/QoS/HPA、38 PDB/节点维护、39 Pod 安全上下文 | 提升工作负载可靠性与安全性 |
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
-| 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno、53 安全加固清单 | 建立访问控制与策略治理 |
+| 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno、53 安全加固清单、55 审计日志与 Secrets 加密 | 建立访问控制与策略治理 |
 | 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维、47 监控告警实战、48 备份恢复演练、49 日志采集实战、51 k3s 内置组件与自动部署机制 | 提升安装、备份、恢复、排障、可观测能力 |
 
 ### 章节依赖关系
@@ -139,6 +139,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 52 镜像仓库与离线交付 | 03/05/08/24/45/46/51 | registries.yaml、私有仓库认证/TLS、离线导入、Harbor/扫描/签名选型 |
 | 53 集群安全加固清单 | 07/32/35/39/43/50/52 | 安全盘点命令、RBAC/Secret/PSA/NetworkPolicy/审计/运行时加固清单 |
 | 54 存储进阶与选型 | 05/20/40/46/48/51/53 | local-path 边界、RWO/RWX/备份/扩容、NFS/Longhorn/Rook-Ceph 选型 |
+| 55 审计日志与 Secrets 加密实操 | 07/12/36/46/50/53 | Audit Policy、API 审计日志、k3s secrets encryption 启用/验证/回滚 |
 
 ---
 
@@ -220,3 +221,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [52 镜像仓库与离线交付](52-镜像仓库与离线交付.md) | registries.yaml、私有仓库认证、离线导入、Harbor 与供应链安全选型 |
 | [53 集群安全加固清单](53-集群安全加固清单.md) | 身份/Secret/Pod/网络/节点/审计/备份分层加固清单与实测盘点 |
 | [54 存储进阶与选型](54-存储进阶与选型.md) | local-path 能力边界、NFS/Longhorn/Rook-Ceph 对比与生产存储决策 |
+| [55 审计日志与Secrets加密实操](55-审计日志与Secrets加密实操.md) | 启用/验证/回滚 API 审计日志与 k3s secrets encryption |
