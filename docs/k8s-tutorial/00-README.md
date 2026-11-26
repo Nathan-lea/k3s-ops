@@ -78,7 +78,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
 | 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno | 建立访问控制与策略治理 |
-| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维、47 监控告警实战、48 备份恢复演练、49 日志采集实战 | 提升安装、备份、恢复、排障、可观测能力 |
+| 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维、47 监控告警实战、48 备份恢复演练、49 日志采集实战、51 k3s 内置组件与自动部署机制 | 提升安装、备份、恢复、排障、可观测能力 |
 
 ### 章节依赖关系
 
@@ -135,6 +135,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 48 备份恢复演练 | 05/08/12/38/46 | k3s 标准 etcd 快照（`k3s etcd-snapshot`）与 `k3s-ops.sh` 封装对照、PV 数据备份恢复实操、restore 检查清单与 Velero 选型 |
 | 49 日志采集实战 | 08/10/34/36/47 | Loki + Promtail + Grafana 轻量部署、LogQL 排障、日志保留与资源裁剪、实测镜像拉取坑 |
 | 50 Secret 管理进阶 | 05/07/27/29/43/46 | SOPS+age 安全入 Git、ESO 外部密钥同步、RBAC 明文可见边界、四方案选型 |
+| 51 k3s 内置组件与自动部署机制 | 02/08/10/24/44/45/46 | manifests/AddOn、HelmChart/HelmChartConfig、disable 语义、k3s 与上游 K8s 差异 |
 
 ---
 
@@ -212,3 +213,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [48 备份恢复演练](48-备份恢复演练.md) | k3s 标准 etcd 快照、PV 数据备份恢复实操、restore 前检查与后验收、Velero/异地备份选型 |
 | [49 日志采集实战](49-日志采集实战.md) | Loki + Promtail + Grafana 轻量日志栈、LogQL 查错排障、保留期/资源裁剪、清理 |
 | [50 Secret 管理进阶](50-Secret管理进阶.md) | SOPS/SealedSecrets/ESO/Vault 对比、SOPS+age 加密入 Git、ESO 外部密钥同步、RBAC 边界 |
+| [51 k3s 内置组件与自动部署机制](51-k3s内置组件与自动部署机制.md) | manifests/AddOn 自动部署、HelmChart/HelmChartConfig、disable 生命周期、k3s 运维差异 |
