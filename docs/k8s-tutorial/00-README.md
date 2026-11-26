@@ -77,7 +77,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | Pod 与运行治理 | 33 生命周期/探针/优雅终止、34 资源治理/QoS/HPA、38 PDB/节点维护、39 Pod 安全上下文 | 提升工作负载可靠性与安全性 |
 | 入口与平台扩展 | 31 Ingress 与证书、37 Gateway API 入门、41 Gateway API 进阶、42 CRD/Operator | 掌握南北向流量与平台扩展 |
 | GitOps 与交付 | 24 Helm、25 Kustomize/Helm 对比、26 Fleet/ArgoCD、27 仓库组织、28 Helm 实战、29 私有仓库、30 混用 | 建立声明式交付体系 |
-| 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno | 建立访问控制与策略治理 |
+| 安全与多租户 | 32 Rancher 多租户/RBAC、35 NetworkPolicy、39 Pod 安全、43 Kyverno、53 安全加固清单 | 建立访问控制与策略治理 |
 | 运维与排障 | 12 etcd 深入、36 故障排查 Runbook、45 装前服务器参数、46 集群生命周期运维、47 监控告警实战、48 备份恢复演练、49 日志采集实战、51 k3s 内置组件与自动部署机制 | 提升安装、备份、恢复、排障、可观测能力 |
 
 ### 章节依赖关系
@@ -137,6 +137,7 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | 50 Secret 管理进阶 | 05/07/27/29/43/46 | SOPS+age 安全入 Git、ESO 外部密钥同步、RBAC 明文可见边界、四方案选型 |
 | 51 k3s 内置组件与自动部署机制 | 02/08/10/24/44/45/46 | manifests/AddOn、HelmChart/HelmChartConfig、disable 语义、k3s 与上游 K8s 差异 |
 | 52 镜像仓库与离线交付 | 03/05/08/24/45/46/51 | registries.yaml、私有仓库认证/TLS、离线导入、Harbor/扫描/签名选型 |
+| 53 集群安全加固清单 | 07/32/35/39/43/50/52 | 安全盘点命令、RBAC/Secret/PSA/NetworkPolicy/审计/运行时加固清单 |
 
 ---
 
@@ -216,3 +217,4 @@ cd ~/k3s-ops && ./k3s-ops.sh status
 | [50 Secret 管理进阶](50-Secret管理进阶.md) | SOPS/SealedSecrets/ESO/Vault 对比、SOPS+age 加密入 Git、ESO 外部密钥同步、RBAC 边界 |
 | [51 k3s 内置组件与自动部署机制](51-k3s内置组件与自动部署机制.md) | manifests/AddOn 自动部署、HelmChart/HelmChartConfig、disable 生命周期、k3s 运维差异 |
 | [52 镜像仓库与离线交付](52-镜像仓库与离线交付.md) | registries.yaml、私有仓库认证、离线导入、Harbor 与供应链安全选型 |
+| [53 集群安全加固清单](53-集群安全加固清单.md) | 身份/Secret/Pod/网络/节点/审计/备份分层加固清单与实测盘点 |
