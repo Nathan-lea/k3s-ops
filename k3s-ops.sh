@@ -25,7 +25,8 @@ Commands:
   remove-node -n <name>      移除指定节点
   upgrade -v <version>       升级 k3s 版本
   backup                     etcd 快照备份
-  restore -f <snapshot>      从快照恢复
+  restore -f <snapshot> [-v ver] [-e expected] [-c cm] [-a absent_cm] [-n ns] [-m]
+                               从快照恢复（破坏性；支持版本 preflight/受控二进制重装/验收）
   deploy-rancher             部署 Rancher UI
   reset-rancher-admin        重置 Rancher admin 密码
   deploy-ingress             部署 nginx-ingress
@@ -326,29 +327,53 @@ cmd_backup() {
 
 # --- Command: restore ---
 cmd_restore() {
-  local snapshot_file=""
-  while getopts "f:" opt; do
+  local snapshot_file="" restore_k3s_version="" expected_k3s_version=""
+  local verify_configmap="" verify_absent_configmap="" verify_namespace="rollback-demo"
+  local allow_version_mismatch="false"
+  while getopts "f:v:e:c:a:n:m" opt; do
     case "$opt" in
       f) snapshot_file="$OPTARG" ;;
+      v) restore_k3s_version="$OPTARG" ;;
+      e) expected_k3s_version="$OPTARG" ;;
+      c) verify_configmap="$OPTARG" ;;
+      a) verify_absent_configmap="$OPTARG" ;;
+      n) verify_namespace="$OPTARG" ;;
+      m) allow_version_mismatch="true" ;;
       *) exit 1 ;;
     esac
   done
 
   if [ -z "$snapshot_file" ]; then
-    log_error "Usage: $(basename "$0") restore -f <snapshot_file>"
+    log_error "Usage: $(basename "$0") restore -f <snapshot_file> [-v restore_k3s_version] [-e expected_k3s_version] [-c verify_configmap] [-a verify_absent_configmap] [-n verify_namespace] [-m]"
     exit 1
   fi
 
   cd "${SELF_DIR}"
   log_warn "Restoring from snapshot: ${snapshot_file}"
-  log_warn "This will stop all server nodes and restart the cluster!"
+  log_warn "Destructive: stops servers/agents, moves server db aside, runs k3s cluster-reset restore."
+  log_warn "etcd restore rolls back cluster state, not PV data. Rehearse in isolated env first."
+  if [ -n "$restore_k3s_version" ]; then
+    log_warn "Will reinstall k3s ${restore_k3s_version} on all nodes with INSTALL_K3S_SKIP_START=true before restore."
+  fi
+  if [ "$allow_version_mismatch" = "true" ]; then
+    log_warn "allow_version_mismatch=true: preflight version guards relaxed; use only after rehearsal."
+  fi
   read -rp "Continue? [y/N] " confirm
   if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
     log_info "Restore cancelled."
     exit 0
   fi
 
-  log_cmd "Restoring from snapshot" run_playbook "k3s-restore.yml" -e "snapshot_file=${snapshot_file}"
+  local -a extra_vars
+  extra_vars=(-e "snapshot_file=${snapshot_file}")
+  extra_vars+=(-e "allow_version_mismatch=${allow_version_mismatch}")
+  extra_vars+=(-e "verify_namespace=${verify_namespace}")
+  [ -n "$restore_k3s_version" ] && extra_vars+=(-e "restore_k3s_version=${restore_k3s_version}")
+  [ -n "$expected_k3s_version" ] && extra_vars+=(-e "expected_k3s_version=${expected_k3s_version}")
+  [ -n "$verify_configmap" ] && extra_vars+=(-e "verify_configmap=${verify_configmap}")
+  [ -n "$verify_absent_configmap" ] && extra_vars+=(-e "verify_absent_configmap=${verify_absent_configmap}")
+
+  log_cmd "Restoring from snapshot" run_playbook "k3s-restore.yml" "${extra_vars[@]}"
 }
 
 # --- Command: deploy-rancher ---

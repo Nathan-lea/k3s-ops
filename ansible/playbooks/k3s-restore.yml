@@ -11,6 +11,13 @@
          else (k3s_etcd_snapshot_dir ~ '/' ~ snapshot_file) }}
     k3s_restore_db_dir: "{{ k3s_data_dir }}/server/db"
     k3s_restore_db_backup: "{{ k3s_data_dir }}/server/db.bak.restore-{{ ansible_date_time.iso8601_basic_short }}"
+    k3s_restore_staging_dir: "{{ k3s_data_dir }}/server/restore-staging"
+    k3s_restore_allow_version_mismatch: "{{ allow_version_mismatch | default(false) | bool }}"
+    k3s_restore_k3s_version: "{{ restore_k3s_version | default('') }}"
+    k3s_restore_expected_version: "{{ expected_k3s_version | default('') }}"
+    k3s_restore_verify_configmap: "{{ verify_configmap | default('') }}"
+    k3s_restore_verify_namespace: "{{ verify_namespace | default('rollback-demo') }}"
+    k3s_restore_verify_absent_configmap: "{{ verify_absent_configmap | default('') }}"
 
   tasks:
     - name: Assert snapshot_file is provided
@@ -30,6 +37,47 @@
         msg: "Snapshot file {{ k3s_restore_snapshot }} not found on {{ inventory_hostname }}"
       when: not snap_stat.stat.exists or not snap_stat.stat.isreg
 
+    - name: Preflight - check embedded etcd db presence
+      stat:
+        path: "{{ k3s_restore_db_dir }}/etcd"
+      register: etcd_db_stat
+
+    - name: Preflight - warn/fail when etcd db is missing
+      fail:
+        msg: >-
+          {{ k3s_restore_db_dir }}/etcd not found. This restore flow supports k3s embedded etcd snapshots only.
+          If cluster uses sqlite/external datastore, use datastore-specific restore.
+      when: not etcd_db_stat.stat.exists
+
+    - name: Preflight - get current k3s version
+      command: k3s --version
+      register: k3s_current_version_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: Preflight - extract current k3s version
+      set_fact:
+        k3s_restore_current_version: >-
+          {{ (k3s_current_version_cmd.stdout_lines | default(['unknown']) | first)
+             | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+') | default('unknown') }}
+
+    - name: Preflight - version mismatch guard
+      assert:
+        that:
+          - k3s_restore_allow_version_mismatch or k3s_restore_k3s_version | length > 0 or k3s_restore_expected_version | length == 0 or k3s_restore_current_version == k3s_restore_expected_version
+        fail_msg: >-
+          k3s version mismatch/risk: current={{ k3s_restore_current_version }}, expected={{ k3s_restore_expected_version | default('n/a') }}.
+          Cross-minor or dirty-state restores can fail (R4 evidence: etcd peer URL/bootstrap mismatch).
+          Set restore_k3s_version=<target> to reinstall compatible binary on all nodes, or set allow_version_mismatch=true only after isolated rehearsal.
+
+    - name: Preflight - require explicit reinstall for cross-minor restore safety
+      assert:
+        that:
+          - k3s_restore_k3s_version | length > 0 or k3s_restore_allow_version_mismatch or k3s_restore_expected_version | length == 0 or (k3s_restore_current_version.split('.')[:2] == k3s_restore_expected_version.split('.')[:2])
+        fail_msg: >-
+          Cross-minor restore detected (current={{ k3s_restore_current_version }}, expected={{ k3s_restore_expected_version }}).
+          Provide restore_k3s_version=<compatible-version> to reinstall binaries before cluster-reset, or allow_version_mismatch=true only for rehearsed manual flows.
+
     - name: Stop k3s on all server nodes
       systemd:
         name: k3s
@@ -45,16 +93,42 @@
       loop: "{{ groups.get('agent', []) }}"
       when: groups.get('agent', []) | length > 0
 
+    - name: Optionally reinstall k3s binary on all server nodes
+      shell: |
+        set -euo pipefail
+        export INSTALL_K3S_VERSION="{{ k3s_restore_k3s_version }}"
+        export INSTALL_K3S_SKIP_START=true
+        if [ -n "${INSTALL_K3S_MIRROR:-}" ]; then export INSTALL_K3S_MIRROR; fi
+        curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | sh -s - server
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['server'] }}"
+      when: k3s_restore_k3s_version | length > 0
+
+    - name: Optionally reinstall k3s binary on all agent nodes
+      shell: |
+        set -euo pipefail
+        export INSTALL_K3S_VERSION="{{ k3s_restore_k3s_version }}"
+        export INSTALL_K3S_SKIP_START=true
+        if [ -n "${INSTALL_K3S_MIRROR:-}" ]; then export INSTALL_K3S_MIRROR; fi
+        curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | sh -s - agent
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ item }}"
+      loop: "{{ groups.get('agent', []) }}"
+      when: k3s_restore_k3s_version | length > 0 and groups.get('agent', []) | length > 0
+
     - name: Ensure restore staging dir exists
       file:
-        path: "{{ k3s_data_dir }}/server/restore-staging"
+        path: "{{ k3s_restore_staging_dir }}"
         state: directory
         mode: '0700'
 
     - name: Stage snapshot before moving db dir
       copy:
         src: "{{ k3s_restore_snapshot }}"
-        dest: "{{ k3s_data_dir }}/server/restore-staging/{{ k3s_restore_snapshot | basename }}"
+        dest: "{{ k3s_restore_staging_dir }}/{{ k3s_restore_snapshot | basename }}"
         remote_src: true
         mode: '0600'
 
@@ -75,13 +149,13 @@
 
     - name: Restore staged snapshot into snapshot dir
       copy:
-        src: "{{ k3s_data_dir }}/server/restore-staging/{{ k3s_restore_snapshot | basename }}"
+        src: "{{ k3s_restore_staging_dir }}/{{ k3s_restore_snapshot | basename }}"
         dest: "{{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}"
         remote_src: true
         mode: '0600'
 
     - name: Run k3s cluster-reset restore
-      command: >
+      command: >-
         k3s server
         --cluster-reset
         --cluster-reset-restore-path={{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}
@@ -100,6 +174,14 @@
         delay: 10
         timeout: 180
 
+    - name: Verify API /readyz
+      command: kubectl get --raw=/readyz
+      register: readyz
+      retries: 18
+      delay: 10
+      until: readyz.rc == 0
+      changed_when: false
+
     - name: Start k3s on remaining servers
       systemd:
         name: k3s
@@ -116,13 +198,26 @@
       loop: "{{ groups.get('agent', []) }}"
       when: groups.get('agent', []) | length > 0
 
-    - name: Verify first server node is Ready
-      command: kubectl get --raw=/readyz
-      register: readyz
-      retries: 18
-      delay: 10
-      until: readyz.rc == 0
+    - name: Post-verify - kubectl get nodes
+      command: kubectl get nodes -o wide
+      register: nodes_out
       changed_when: false
+      retries: 12
+      delay: 10
+      until: nodes_out.rc == 0
+
+    - name: Post-verify - expected configmap exists
+      command: kubectl -n {{ k3s_restore_verify_namespace }} get configmap {{ k3s_restore_verify_configmap }}
+      register: verify_cm
+      changed_when: false
+      when: k3s_restore_verify_configmap | length > 0
+
+    - name: Post-verify - unexpected configmap absent
+      command: kubectl -n {{ k3s_restore_verify_namespace }} get configmap {{ k3s_restore_verify_absent_configmap }}
+      register: verify_absent_cm
+      failed_when: verify_absent_cm.rc == 0
+      changed_when: false
+      when: k3s_restore_verify_absent_configmap | length > 0
 
     - name: Display restore summary
       debug:
@@ -130,4 +225,8 @@
           - "Restore command completed on {{ inventory_hostname }}"
           - "Snapshot: {{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}"
           - "Old db moved to: {{ k3s_restore_db_backup if db_stat.stat.exists else '(none)' }}"
-          - "Verify cluster objects/version manually; etcd restore rolls back cluster state, not PV data."
+          - "Current k3s binary: {{ k3s_restore_current_version }}"
+          - "Reinstall requested: {{ k3s_restore_k3s_version if k3s_restore_k3s_version | length > 0 else '(none)' }}"
+          - "Nodes:"
+          - "{{ nodes_out.stdout_lines }}"
+          - "etcd restore rolls back cluster state, not PV data; verify workload/app semantics before reopening traffic."
