@@ -318,3 +318,4 @@ vagrant ssh k3s-demo-server-1 -c "sudo k3s secrets-encrypt status 2>&1 | tail -5
 - [K3s secrets-encrypt CLI](https://docs.k3s.io/cli/secrets-encrypt)
 - [Kubernetes Auditing](https://kubernetes.io/docs/tasks/debug/debug-cluster/audit/)
 - [Kubernetes Encrypting Confidential Data at Rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
+- [k3s CIS 扫描基线（本仓库 2026-11-27）](../kube-bench/k3s-cis-1.7-server-2026-11-27.summary.md)
