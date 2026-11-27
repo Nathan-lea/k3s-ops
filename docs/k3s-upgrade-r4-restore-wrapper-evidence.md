@@ -59,12 +59,35 @@ playbook 增加：
 - 可选 `verify_absent_configmap` 不存在检查（用于“升级后 marker 应消失”验收）。
 - summary 明确提示：旧 db 备份位置、etcd restore 不回滚 PV、需人工验证业务语义。
 
+## 验证：受控跨 minor restore（PASS）
+
+日期：2026-11-27，隔离 `tmp/rollback-lab-r4v2`（`192.168.59.0/24`，1 server，embedded etcd）。
+
+1. 基线 `v1.30.14+k3s2`：创建 `ns/rollback-demo`、`cm/baseline`，保存 snapshot `r4v2-baseline-k3s-r4v2-lab-server-1-1795756963`。
+2. 升级 `v1.31.14+k3s1`，创建 `cm/after-upgrade`。
+3. 运行加固 playbook，显式受控参数：
+
+```bash
+ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook -i tmp/rollback-lab-r4v2/inventory.yml \
+  ansible/playbooks/k3s-restore.yml \
+  -e snapshot_file=r4v2-baseline-k3s-r4v2-lab-server-1-1795756963 \
+  -e restore_k3s_version=v1.30.14+k3s2 \
+  -e expected_k3s_version=v1.30.14+k3s2 \
+  -e verify_namespace=rollback-demo \
+  -e verify_configmap=baseline \
+  -e verify_absent_configmap=after-upgrade
+```
+
+结果：**PASS**（`ok=24 changed=9 failed=0`）。节点恢复 `v1.30.14+k3s2` Ready；`baseline` 存在，`after-upgrade` 消失；旧 db 备份为 `db.bak.restore-*`。
+
 ## 结论
 
 - 旧封装危险成功：**已修复**。
-- 修复后封装：**可阻止已知危险路径并执行受控流程**，但跨 minor/peer-URL/bootstrap 不兼容场景仍可能失败；因此 `restore` 仍是高风险操作，必须 preflight + 隔离演练 + post-verify。
+- 无版本控制跨 minor restore：**FAIL**（peer URL/bootstrap 不兼容，见失败样本）。
+- 受控跨 minor restore（显式回退二进制 + restore + marker 验收）：**PASS**（单节点 embedded etcd 隔离实测）。
+- 仍是高风险操作：必须 preflight、隔离演练、版本策略、post-verify；不宣称 sqlite/external datastore、PV 回滚、HA/复杂拓扑通用恢复。
 
 ## 证据
 
-- 本地隔离日志：`tmp/rollback-lab-r4/evidence/`（gitignored）
+- 本地隔离日志：`tmp/rollback-lab-r4/evidence/`、`tmp/rollback-lab-r4v2/evidence/`（gitignored）
 - 关键失败样本：`r4b-restore-fixed.log`，etcd member peer URL mismatch
