@@ -1,68 +1,56 @@
 # R4 封装 restore 端到端验证（隔离环境）
 
-> 状态：**已实操（失败样本）**。  
+> 状态：**已实操，发现危险成功 + 跨 minor restore 边界**。  
 > 日期：2026-11-27  
-> 环境：隔离 `tmp/rollback-lab-r4`（gitignored），`cluster_name=k3s-r4-lab`，`192.168.58.0/24`，1 server 2c/2G，bento/ubuntu-22.04，k3s `v1.30.14+k3s2` embedded etcd。教学集群演练前后已关停/恢复。
+> 环境：隔离 `tmp/rollback-lab-r4`（gitignored），`k3s-r4-lab`，`192.168.58.0/24`，1 server 2c/2G，bento/ubuntu-22.04，embedded etcd。教学集群演练期间已关停，演练后恢复。
 
 ## 目标
 
-验证仓库封装 `ansible/playbooks/k3s-restore.yml`（`k3s-ops.sh restore -f` 底层 playbook）在“跨 minor 升级后回滚”场景的端到端行为。
+验证 `ansible/playbooks/k3s-restore.yml`（`k3s-ops.sh restore -f` 底层）在跨 minor 升级后回滚场景的端到端行为。
 
 ## 场景
 
-1. 基线：安装 v1.30.14+k3s2（`--cluster-init`），创建 `ns/rollback-demo`、`cm/baseline`，保存 etcd snapshot `r4-baseline-k3s-r4-lab-server-1-1795751263`。
-2. 升级：手动升级到 `v1.31.14+k3s1`，节点 Ready；创建 `cm/after-upgrade`。
-3. 封装 restore：运行
+1. 基线：`v1.30.14+k3s2`，`--cluster-init`，创建 `ns/rollback-demo` + `cm/baseline`，保存 snapshot `r4b-baseline-k3s-r4-lab-server-1-1795752432`。
+2. 升级：手动二进制升级到 `v1.31.14+k3s1`，节点 Ready，创建 `cm/after-upgrade`。
+3. 执行封装 restore：`ansible-playbook -i tmp/rollback-lab-r4/inventory.yml ansible/playbooks/k3s-restore.yml -e snapshot_file=<snapshot>`。
 
-```bash
-ANSIBLE_CONFIG=ansible/ansible.cfg ANSIBLE_STDOUT_CALLBACK=default ANSIBLE_CALLBACK_RESULT_FORMAT=yaml \
-ansible-playbook -i tmp/rollback-lab-r4/inventory.yml ansible/playbooks/k3s-restore.yml \
-  -e snapshot_file=/var/lib/rancher/k3s/server/db/snapshots/r4-baseline-k3s-r4-lab-server-1-1795751263
+## 发现 1：旧 playbook 危险成功（FAIL）
+
+旧实现 `args.creates: /var/lib/rancher/k3s/server/db/etcd`，在 dirty db 存在时跳过实际 restore；playbook 返回 `ok/changed/failed=0`，但节点仍 `v1.31.14+k3s1`，`cm/after-upgrade` 仍存在。**这是危险成功假象**。
+
+## 修复（本次已落地）
+
+`ansible/playbooks/k3s-restore.yml` 已修复/加固：
+- `become: yes`、`any_errors_fatal: true`
+- snapshot 路径规范化（绝对路径或 `k3s_etcd_snapshot_dir` 下文件名）
+- 停止所有 server + agent
+- restore 前 stage 快照，再将现有 `{{ k3s_data_dir }}/server/db` 移到 `db.bak.restore-*`（避免危险短路）
+- 执行 `k3s server --cluster-reset --cluster-reset-restore-path=...`
+- 启动 first server、等待 6443、启动其余 server/agent
+- `kubectl get --raw=/readyz` 校验 + restore 摘要
+
+## 发现 2：修复后跨 minor restore 仍失败（FAIL，需后续策略）
+
+重跑修复版 playbook 时，`cluster-reset` 执行完成，但启动 k3s 失败：
+
+```
+Failed to test etcd connection: this server is a not a member of the etcd cluster.
+Found [k3s-r4-lab-server-1-ad1e6f1d=https://10.0.2.15:2380], expect: k3s-r4-lab-server-1-ad1e6f1d=https://192.168.58.10:2380
 ```
 
-## 观察结果
+同时节点二进制仍是 `v1.31.14+k3s1`，而快照来自 `v1.30.14+k3s2`。说明跨 minor/dirty 状态 restore 不是“清 db + cluster-reset”就够，还需明确处理：
+- **版本兼容**：restore 执行与恢复后启动的 k3s 二进制应与快照/目标版本策略一致；跨 minor 回退通常需先回退二进制或按受控流程处理。
+- **etcd member peer URL/引导参数**：快照内成员地址与当前节点 `--node-ip/--advertise-address` 可能不一致，需要专门恢复流程（单节点可考虑 reset/重建参数，但要谨慎）。
+- **preflight**：应检查 snapshot 存在、db 备份空间、当前/目标版本、token、是否 embedded etcd、是否单节点/HA，并明确危险提示。
+- **post-verify**：应验证 API ready、节点版本、关键对象（快照前 marker 存在/快照后 marker 不存在）、系统 pod。
 
-Playbook **返回成功**（`ok=5 changed=3 failed=0`），但**restore 语义未达成**：
+## 结论
 
-- `Restore from snapshot` task：`changed`。
-- 恢复后检查：节点仍为 `v1.31.14+k3s1` Ready；`rollback-demo` 中 `after-upgrade` ConfigMap **仍存在**；`baseline` 也存在。
-- 快照文件仍在，etcd 目录仍存在。
-
-## 结论：R4 = FAIL（危险成功）
-
-封装在该场景下产生“绿色成功”假象，但未回滚集群状态。
-
-## 根因（代码事实）
-
-`ansible/playbooks/k3s-restore.yml`：
-
-```yaml
-- name: Restore from snapshot
-  command: >
-    k3s server
-    --cluster-reset
-    --cluster-reset-restore-path={{ snapshot_file }}
-  args:
-    creates: /var/lib/rancher/k3s/server/db/etcd
-```
-
-- `creates: /var/lib/rancher/k3s/server/db/etcd` 在 dirty 升级后 data-dir 存在时会**跳过 cluster-reset**（本次 task 仍 reported changed 需要结合完整输出复核，但实际集群状态未回滚；无论如何 restore 未生效）。
-- playbook 未做：版本/token 兼容校验、停服后 data-dir 清理策略、snapshot 路径/名称规范化、恢复后二进制版本处理、全量语义验收（对象/版本/业务 smoke）。
-- playbook 先 `systemctl stop k3s`，但后续 `k3s server --cluster-reset ...` 的前提和 data-dir 状态未被管理；跨 minor 场景还需要二进制/引导数据兼容处理。
-
-## 对 `k3s-ops.sh restore -f` 的影响
-
-`k3s-ops.sh restore -f` 仅做交互确认并调用该 playbook；因此当前封装**不应被视为可靠 restore 路径**，尤其跨 minor/dirty data-dir 场景。
-
-## 建议修复方向（后续单独变更）
-
-1. 明确 restore 合约：仅支持“同版本/同 token/干净 data-dir”或实现完整安全流程。
-2. 去掉危险的 `creates` 短路，改为显式 preflight + 受控 data-dir 备份/清理。
-3. 增加 preflight：snapshot 存在性、快照路径解析、k3s 版本兼容、token/CA 备份、磁盘空间、确认目标。
-4. 增加 post-restore 验收：节点/API Ready、目标快照前对象存在、快照后 marker 不存在（可选 smoke）、版本提示。
-5. 文档强标“破坏性、需隔离演练”，CLI 默认拒绝除非强确认。
+- R4 对旧封装：**FAIL（危险成功）**，已修复最严重的 no-op 短路。
+- R4 对修复封装：**仍 FAIL（跨 minor/成员地址边界）**，不能宣称通用 restore 可用。
+- `k3s-ops.sh restore -f` 在文档/CLI 上应标注为高风险实验性能力，使用前需隔离演练并确认版本/拓扑/快照兼容。
 
 ## 证据
 
-- `tmp/rollback-lab-r4/evidence/restore-playbook-run2.log`
-- `tmp/rollback-lab-r4/evidence/post-restore-check.log`
+- 隔离演练日志：`tmp/rollback-lab-r4/evidence/`（gitignored，本地保留）
+- 关键失败日志：`r4b-restore-fixed.log`、journal 中 etcd member peer URL mismatch

@@ -2,8 +2,34 @@
 - name: Restore cluster from etcd snapshot
   hosts: server[0]
   gather_facts: true
+  become: yes
+  any_errors_fatal: true
+
+  vars:
+    k3s_restore_snapshot: >-
+      {{ snapshot_file if (snapshot_file is string and snapshot_file.startswith('/'))
+         else (k3s_etcd_snapshot_dir ~ '/' ~ snapshot_file) }}
+    k3s_restore_db_dir: "{{ k3s_data_dir }}/server/db"
+    k3s_restore_db_backup: "{{ k3s_data_dir }}/server/db.bak.restore-{{ ansible_date_time.iso8601_basic_short }}"
 
   tasks:
+    - name: Assert snapshot_file is provided
+      assert:
+        that:
+          - snapshot_file is defined
+          - snapshot_file | length > 0
+        fail_msg: "snapshot_file is required (path or filename under {{ k3s_etcd_snapshot_dir }})"
+
+    - name: Verify snapshot file exists
+      stat:
+        path: "{{ k3s_restore_snapshot }}"
+      register: snap_stat
+
+    - name: Fail if snapshot not found
+      fail:
+        msg: "Snapshot file {{ k3s_restore_snapshot }} not found on {{ inventory_hostname }}"
+      when: not snap_stat.stat.exists or not snap_stat.stat.isreg
+
     - name: Stop k3s on all server nodes
       systemd:
         name: k3s
@@ -11,23 +37,54 @@
       delegate_to: "{{ item }}"
       loop: "{{ groups['server'] }}"
 
-    - name: Verify snapshot file exists
+    - name: Stop k3s-agent on all agent nodes
+      systemd:
+        name: k3s-agent
+        state: stopped
+      delegate_to: "{{ item }}"
+      loop: "{{ groups.get('agent', []) }}"
+      when: groups.get('agent', []) | length > 0
+
+    - name: Ensure restore staging dir exists
+      file:
+        path: "{{ k3s_data_dir }}/server/restore-staging"
+        state: directory
+        mode: '0700'
+
+    - name: Stage snapshot before moving db dir
+      copy:
+        src: "{{ k3s_restore_snapshot }}"
+        dest: "{{ k3s_data_dir }}/server/restore-staging/{{ k3s_restore_snapshot | basename }}"
+        remote_src: true
+        mode: '0600'
+
+    - name: Check existing etcd db dir
       stat:
-        path: "{{ snapshot_file }}"
-      register: snap_stat
+        path: "{{ k3s_restore_db_dir }}"
+      register: db_stat
 
-    - name: Fail if snapshot not found
-      fail:
-        msg: "Snapshot file {{ snapshot_file }} not found"
-      when: not snap_stat.stat.exists
+    - name: Move aside existing etcd db dir before restore
+      command: mv "{{ k3s_restore_db_dir }}" "{{ k3s_restore_db_backup }}"
+      when: db_stat.stat.exists
 
-    - name: Restore from snapshot
+    - name: Ensure snapshot dir exists for restore
+      file:
+        path: "{{ k3s_etcd_snapshot_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Restore staged snapshot into snapshot dir
+      copy:
+        src: "{{ k3s_data_dir }}/server/restore-staging/{{ k3s_restore_snapshot | basename }}"
+        dest: "{{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}"
+        remote_src: true
+        mode: '0600'
+
+    - name: Run k3s cluster-reset restore
       command: >
         k3s server
         --cluster-reset
-        --cluster-reset-restore-path={{ snapshot_file }}
-      args:
-        creates: /var/lib/rancher/k3s/server/db/etcd
+        --cluster-reset-restore-path={{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}
       register: restore_result
       changed_when: restore_result.rc == 0
 
@@ -41,7 +98,7 @@
       wait_for:
         port: 6443
         delay: 10
-        timeout: 120
+        timeout: 180
 
     - name: Start k3s on remaining servers
       systemd:
@@ -49,10 +106,28 @@
         state: started
       delegate_to: "{{ item }}"
       loop: "{{ groups['server'][1:] }}"
+      when: groups['server'] | length > 1
 
-    - name: Restart all agents
+    - name: Start k3s-agent on all agents
       systemd:
         name: k3s-agent
-        state: restarted
+        state: started
       delegate_to: "{{ item }}"
-      loop: "{{ groups['agent'] }}"
+      loop: "{{ groups.get('agent', []) }}"
+      when: groups.get('agent', []) | length > 0
+
+    - name: Verify first server node is Ready
+      command: kubectl get --raw=/readyz
+      register: readyz
+      retries: 18
+      delay: 10
+      until: readyz.rc == 0
+      changed_when: false
+
+    - name: Display restore summary
+      debug:
+        msg:
+          - "Restore command completed on {{ inventory_hostname }}"
+          - "Snapshot: {{ k3s_etcd_snapshot_dir }}/{{ k3s_restore_snapshot | basename }}"
+          - "Old db moved to: {{ k3s_restore_db_backup if db_stat.stat.exists else '(none)' }}"
+          - "Verify cluster objects/version manually; etcd restore rolls back cluster state, not PV data."
