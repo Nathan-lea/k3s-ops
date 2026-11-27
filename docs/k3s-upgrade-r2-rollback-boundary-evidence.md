@@ -61,6 +61,12 @@ Found [k3s-r2-lab-server-1-3a1b1527=https://10.0.2.15:2380], expect: k3s-r2-lab-
    - peer URL/bootstrap 不兼容 -> 停止自动化，走人工恢复 runbook。
 4. post-verify 必须包含：节点版本、Ready、关键对象 marker、系统 Pod、业务 smoke；记录 `db.bak.restore-*` 位置。
 
+## 封装落地状态（2026-11-27）
+
+- `ansible/playbooks/k3s-restore.yml` 已增加 snapshot peer URL preflight：从快照 db 提取 `https://<ip>:2380` 成员地址，与 `restore_node_ip`/`node_ip` 期望比较；不匹配默认 fail-fast，提示 R2 启动循环风险。
+- `k3s-ops.sh restore` 新增 `-i restore_node_ip` 与 `-p`（`allow_peer_url_mismatch=true`，仅已演练人工单节点恢复）。
+- 仍未自动修复 peer URL mismatch：该场景需专门单节点恢复 runbook/隔离演练，禁止静默继续。
+
 ## 证据
 
 - 本地隔离日志：`tmp/rollback-lab-r2/evidence/`（gitignored）

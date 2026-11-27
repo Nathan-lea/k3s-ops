@@ -18,6 +18,8 @@
     k3s_restore_verify_configmap: "{{ verify_configmap | default('') }}"
     k3s_restore_verify_namespace: "{{ verify_namespace | default('rollback-demo') }}"
     k3s_restore_verify_absent_configmap: "{{ verify_absent_configmap | default('') }}"
+    k3s_restore_node_ip: "{{ restore_node_ip | default(node_ip | default(first_server_ip)) }}"
+    k3s_restore_allow_peer_url_mismatch: "{{ allow_peer_url_mismatch | default(false) | bool }}"
 
   tasks:
     - name: Assert snapshot_file is provided
@@ -60,6 +62,41 @@
         k3s_restore_current_version: >-
           {{ (k3s_current_version_cmd.stdout_lines | default(['unknown']) | first)
              | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+') | default('unknown') }}
+
+    - name: Preflight - inspect snapshot etcd member peer URLs
+      shell: |
+        set -euo pipefail
+        TMPDIR=$(mktemp -d)
+        cleanup() { rm -rf "$TMPDIR"; }
+        trap cleanup EXIT
+        SNAP="{{ k3s_restore_snapshot }}"
+        DB="$TMPDIR/snap.db"
+        if command -v etcdutl >/dev/null 2>&1; then
+          etcdutl snapshot restore "$SNAP" --data-dir "$TMPDIR/etcd" --skip-hash-check >/dev/null 2>&1 || true
+          [ -f "$TMPDIR/etcd/member/snap/db" ] && DB="$TMPDIR/etcd/member/snap/db"
+        fi
+        if [ ! -s "$DB" ]; then cp "$SNAP" "$DB"; fi
+        strings "$DB" | grep -Eo 'https://[0-9.]+:2380' | sort -u || true
+      args:
+        executable: /bin/bash
+      register: snapshot_peer_urls_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: Preflight - evaluate snapshot peer URL compatibility
+      set_fact:
+        k3s_restore_snapshot_peer_urls: "{{ snapshot_peer_urls_cmd.stdout_lines | default([]) | select('match', '^https://') | list }}"
+        k3s_restore_expected_peer_url: "https://{{ k3s_restore_node_ip }}:2380"
+
+    - name: Preflight - fail on snapshot peer URL mismatch
+      assert:
+        that:
+          - k3s_restore_allow_peer_url_mismatch or (k3s_restore_snapshot_peer_urls | length == 0) or (k3s_restore_expected_peer_url in k3s_restore_snapshot_peer_urls)
+        fail_msg: >-
+          Snapshot etcd peer URL mismatch risk: snapshot has {{ k3s_restore_snapshot_peer_urls | default([]) }},
+          but restore node expects {{ k3s_restore_expected_peer_url }} (restore_node_ip/node_ip).
+          R2 evidence showed startup loop: 'this server is a not a member of the etcd cluster'.
+          Restore on the original node/IP, or set allow_peer_url_mismatch=true only for rehearsed manual single-node recovery.
 
     - name: Preflight - version mismatch guard
       assert:

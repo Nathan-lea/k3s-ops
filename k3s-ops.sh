@@ -25,8 +25,8 @@ Commands:
   remove-node -n <name>      移除指定节点
   upgrade -v <version>       升级 k3s 版本
   backup                     etcd 快照备份
-  restore -f <snapshot> [-v ver] [-e expected] [-c cm] [-a absent_cm] [-n ns] [-m]
-                               从快照恢复（破坏性；支持版本 preflight/受控二进制重装/验收）
+  restore -f <snapshot> [-v ver] [-e expected] [-c cm] [-a absent_cm] [-n ns] [-i node_ip] [-m] [-p]
+                               从快照恢复（破坏性；版本/peer URL preflight、受控重装、验收）
   deploy-rancher             部署 Rancher UI
   reset-rancher-admin        重置 Rancher admin 密码
   deploy-ingress             部署 nginx-ingress
@@ -329,8 +329,8 @@ cmd_backup() {
 cmd_restore() {
   local snapshot_file="" restore_k3s_version="" expected_k3s_version=""
   local verify_configmap="" verify_absent_configmap="" verify_namespace="rollback-demo"
-  local allow_version_mismatch="false"
-  while getopts "f:v:e:c:a:n:m" opt; do
+  local restore_node_ip="" allow_version_mismatch="false" allow_peer_url_mismatch="false"
+  while getopts "f:v:e:c:a:n:i:mp" opt; do
     case "$opt" in
       f) snapshot_file="$OPTARG" ;;
       v) restore_k3s_version="$OPTARG" ;;
@@ -338,13 +338,15 @@ cmd_restore() {
       c) verify_configmap="$OPTARG" ;;
       a) verify_absent_configmap="$OPTARG" ;;
       n) verify_namespace="$OPTARG" ;;
+      i) restore_node_ip="$OPTARG" ;;
       m) allow_version_mismatch="true" ;;
+      p) allow_peer_url_mismatch="true" ;;
       *) exit 1 ;;
     esac
   done
 
   if [ -z "$snapshot_file" ]; then
-    log_error "Usage: $(basename "$0") restore -f <snapshot_file> [-v restore_k3s_version] [-e expected_k3s_version] [-c verify_configmap] [-a verify_absent_configmap] [-n verify_namespace] [-m]"
+    log_error "Usage: $(basename "$0") restore -f <snapshot_file> [-v restore_k3s_version] [-e expected_k3s_version] [-c verify_configmap] [-a verify_absent_configmap] [-n verify_namespace] [-i restore_node_ip] [-m] [-p]"
     exit 1
   fi
 
@@ -358,6 +360,9 @@ cmd_restore() {
   if [ "$allow_version_mismatch" = "true" ]; then
     log_warn "allow_version_mismatch=true: preflight version guards relaxed; use only after rehearsal."
   fi
+  if [ "$allow_peer_url_mismatch" = "true" ]; then
+    log_warn "allow_peer_url_mismatch=true: peer URL preflight relaxed; R2 showed startup loop risk. Manual single-node recovery only."
+  fi
   read -rp "Continue? [y/N] " confirm
   if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
     log_info "Restore cancelled."
@@ -367,11 +372,13 @@ cmd_restore() {
   local -a extra_vars
   extra_vars=(-e "snapshot_file=${snapshot_file}")
   extra_vars+=(-e "allow_version_mismatch=${allow_version_mismatch}")
+  extra_vars+=(-e "allow_peer_url_mismatch=${allow_peer_url_mismatch}")
   extra_vars+=(-e "verify_namespace=${verify_namespace}")
   [ -n "$restore_k3s_version" ] && extra_vars+=(-e "restore_k3s_version=${restore_k3s_version}")
   [ -n "$expected_k3s_version" ] && extra_vars+=(-e "expected_k3s_version=${expected_k3s_version}")
   [ -n "$verify_configmap" ] && extra_vars+=(-e "verify_configmap=${verify_configmap}")
   [ -n "$verify_absent_configmap" ] && extra_vars+=(-e "verify_absent_configmap=${verify_absent_configmap}")
+  [ -n "$restore_node_ip" ] && extra_vars+=(-e "restore_node_ip=${restore_node_ip}")
 
   log_cmd "Restoring from snapshot" run_playbook "k3s-restore.yml" "${extra_vars[@]}"
 }
